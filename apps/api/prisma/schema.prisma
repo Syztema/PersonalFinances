@@ -1,0 +1,436 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AccountType {
+  CASH
+  BANK
+  DIGITAL_WALLET
+  SAVINGS
+  INVESTMENT
+  OTHER
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+  CARD_PURCHASE
+  CARD_PAYMENT
+  DEBT_PAYMENT
+  DEBT_DISBURSEMENT
+}
+
+enum CategoryKind {
+  INCOME
+  EXPENSE
+}
+
+enum Bucket {
+  OBLIGATIONS
+  LEISURE
+  OTHER
+}
+
+enum PaymentMethod {
+  CASH
+  DEBIT_CARD
+  BANK_TRANSFER
+  DIGITAL_WALLET
+  OTHER
+}
+
+enum Frequency {
+  WEEKLY
+  SEMIMONTHLY
+  MONTHLY
+  YEARLY
+  CUSTOM_DAYS
+}
+
+enum ScheduledKind {
+  INCOME
+  EXPENSE
+}
+
+enum ScheduledStatus {
+  PENDING
+  DONE
+  SKIPPED
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum Theme {
+  SYSTEM
+  LIGHT
+  DARK
+}
+
+model User {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String   @db.VarChar(80)
+  email        String   @unique @db.VarChar(254)
+  passwordHash String
+  theme        Theme    @default(SYSTEM)
+  timezone     String   @default("America/Bogota") @db.VarChar(64)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  sessions         Session[]
+  resetTokens      PasswordResetToken[]
+  config           FinancialConfiguration?
+  accounts         Account[]
+  creditCards      CreditCard[]
+  debts            Debt[]
+  categories       Category[]
+  tags             Tag[]
+  transactions     Transaction[]
+  transactionTags  TransactionTag[]
+  budgets          Budget[]
+  budgetCategories BudgetCategory[]
+  goals            Goal[]
+  recurringRules   RecurringRule[]
+  scheduledItems   ScheduledItem[]
+  dismissedAlerts  DismissedAlert[]
+}
+
+model Session {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @db.Uuid
+  tokenHash  String   @unique @db.Char(64)
+  expiresAt  DateTime @db.Timestamptz(3)
+  lastUsedAt DateTime @default(now()) @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique @db.Char(64)
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model FinancialConfiguration {
+  userId                String   @id @db.Uuid
+  obligationsPct        Int      @default(50) @db.SmallInt
+  savingsPct            Int      @default(20) @db.SmallInt
+  investmentPct         Int      @default(10) @db.SmallInt
+  leisurePct            Int      @default(10) @db.SmallInt
+  otherPct              Int      @default(10) @db.SmallInt
+  monthlyIncomeEstimate BigInt?
+  lowBalanceThreshold   BigInt   @default(100000)
+  createdAt             DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime @updatedAt @db.Timestamptz(3)
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String      @db.Uuid
+  name           String      @db.VarChar(60)
+  type           AccountType
+  institution    String?     @db.VarChar(60)
+  initialBalance BigInt      @default(0)
+  openingDate    DateTime    @db.Date
+  icon           String      @db.VarChar(40)
+  color          String      @db.VarChar(7)
+  isActive       Boolean     @default(true)
+  sortOrder      Int         @default(0)
+  createdAt      DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime    @updatedAt @db.Timestamptz(3)
+
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions      Transaction[]   @relation("TransactionAccount")
+  incomingTransfers Transaction[]   @relation("TransactionToAccount")
+  goals             Goal[]
+  recurringRules    RecurringRule[]
+  scheduledItems    ScheduledItem[]
+
+  @@unique([userId, name])
+  @@unique([id, userId])
+}
+
+model CreditCard {
+  id                      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                  String   @db.Uuid
+  name                    String   @db.VarChar(60)
+  issuer                  String?  @db.VarChar(60)
+  creditLimit             BigInt
+  initialDebt             BigInt   @default(0)
+  initialDebtInstallments Int      @default(1) @db.SmallInt
+  openingDate             DateTime @db.Date
+  statementDay            Int      @db.SmallInt
+  paymentDueDay           Int      @db.SmallInt
+  icon                    String   @db.VarChar(40)
+  color                   String   @db.VarChar(7)
+  isActive                Boolean  @default(true)
+  sortOrder               Int      @default(0)
+  createdAt               DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime @updatedAt @db.Timestamptz(3)
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions   Transaction[]
+  recurringRules RecurringRule[]
+  scheduledItems ScheduledItem[]
+
+  @@unique([userId, name])
+  @@unique([id, userId])
+}
+
+model Debt {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String   @db.Uuid
+  name           String   @db.VarChar(60)
+  lender         String?  @db.VarChar(60)
+  initialBalance BigInt   @default(0)
+  openingDate    DateTime @db.Date
+  monthlyPayment BigInt?
+  paymentDay     Int?     @db.SmallInt
+  icon           String   @db.VarChar(40)
+  color          String   @db.VarChar(7)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([userId, name])
+  @@unique([id, userId])
+}
+
+model Category {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String       @db.Uuid
+  name      String       @db.VarChar(40)
+  kind      CategoryKind
+  parentId  String?      @db.Uuid
+  bucket    Bucket?
+  icon      String       @db.VarChar(40)
+  color     String       @db.VarChar(7)
+  isSystem  Boolean      @default(false)
+  systemKey String?      @db.VarChar(30)
+  isActive  Boolean      @default(true)
+  sortOrder Int          @default(0)
+  createdAt DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime     @updatedAt @db.Timestamptz(3)
+
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent           Category?        @relation("CategoryTree", fields: [parentId, userId], references: [id, userId], onDelete: NoAction)
+  children         Category[]       @relation("CategoryTree")
+  transactions     Transaction[]
+  budgetCategories BudgetCategory[]
+  recurringRules   RecurringRule[]
+  scheduledItems   ScheduledItem[]
+
+  @@unique([userId, kind, parentId, name])
+  @@unique([userId, systemKey])
+  @@unique([id, userId])
+}
+
+model Tag {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  name      String   @db.VarChar(30)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions TransactionTag[]
+
+  @@unique([userId, name])
+  @@unique([id, userId])
+}
+
+model TransactionTag {
+  userId        String @db.Uuid
+  transactionId String @db.Uuid
+  tagId         String @db.Uuid
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction Transaction @relation(fields: [transactionId, userId], references: [id, userId], onDelete: Cascade)
+  tag         Tag         @relation(fields: [tagId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@id([transactionId, tagId])
+  @@index([userId, tagId])
+}
+
+model Transaction {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String          @db.Uuid
+  type          TransactionType
+  amount        BigInt
+  date          DateTime        @db.Date
+  description   String?         @db.VarChar(140)
+  payee         String?         @db.VarChar(80)
+  notes         String?         @db.VarChar(500)
+  accountId     String?         @db.Uuid
+  toAccountId   String?         @db.Uuid
+  creditCardId  String?         @db.Uuid
+  debtId        String?         @db.Uuid
+  categoryId    String?         @db.Uuid
+  goalId        String?         @db.Uuid
+  installments  Int?            @db.SmallInt
+  paymentMethod PaymentMethod?
+  parentId      String?         @db.Uuid
+  createdAt     DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
+
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account       Account?         @relation("TransactionAccount", fields: [accountId, userId], references: [id, userId], onDelete: NoAction)
+  toAccount     Account?         @relation("TransactionToAccount", fields: [toAccountId, userId], references: [id, userId], onDelete: NoAction)
+  creditCard    CreditCard?      @relation(fields: [creditCardId, userId], references: [id, userId], onDelete: NoAction)
+  debt          Debt?            @relation(fields: [debtId, userId], references: [id, userId], onDelete: NoAction)
+  category      Category?        @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
+  goal          Goal?            @relation(fields: [goalId, userId], references: [id, userId], onDelete: NoAction)
+  parent        Transaction?     @relation("TransactionChildren", fields: [parentId, userId], references: [id, userId], onDelete: Cascade)
+  children      Transaction[]    @relation("TransactionChildren")
+  tags          TransactionTag[]
+  scheduledItem ScheduledItem?
+
+  @@unique([id, userId])
+  @@index([userId, date(sort: Desc), createdAt(sort: Desc)])
+  @@index([userId, accountId])
+  @@index([userId, toAccountId])
+  @@index([userId, creditCardId, date])
+  @@index([userId, debtId])
+  @@index([userId, categoryId, date])
+  @@index([userId, type, date])
+  @@index([parentId])
+  @@index([goalId])
+}
+
+model Budget {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @db.Uuid
+  month       DateTime @db.Date
+  totalAmount BigInt?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories BudgetCategory[]
+
+  @@unique([userId, month])
+  @@unique([id, userId])
+}
+
+model BudgetCategory {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @db.Uuid
+  budgetId   String   @db.Uuid
+  categoryId String   @db.Uuid
+  amount     BigInt
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  budget   Budget   @relation(fields: [budgetId, userId], references: [id, userId], onDelete: Cascade)
+  category Category @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
+
+  @@unique([budgetId, categoryId])
+}
+
+model Goal {
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String     @db.Uuid
+  name          String     @db.VarChar(60)
+  targetAmount  BigInt
+  targetDate    DateTime?  @db.Date
+  accountId     String     @db.Uuid
+  initialAmount BigInt     @default(0)
+  status        GoalStatus @default(ACTIVE)
+  icon          String     @db.VarChar(40)
+  color         String     @db.VarChar(7)
+  createdAt     DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime   @updatedAt @db.Timestamptz(3)
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account      Account       @relation(fields: [accountId, userId], references: [id, userId], onDelete: NoAction)
+  transactions Transaction[]
+
+  @@unique([id, userId])
+}
+
+model RecurringRule {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String        @db.Uuid
+  name         String        @db.VarChar(60)
+  kind         ScheduledKind
+  amount       BigInt
+  categoryId   String        @db.Uuid
+  accountId    String?       @db.Uuid
+  creditCardId String?       @db.Uuid
+  frequency    Frequency
+  intervalDays Int?          @db.SmallInt
+  day1         Int?          @db.SmallInt
+  day2         Int?          @db.SmallInt
+  startDate    DateTime      @db.Date
+  endDate      DateTime?     @db.Date
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   Category        @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
+  account    Account?        @relation(fields: [accountId, userId], references: [id, userId], onDelete: NoAction)
+  creditCard CreditCard?     @relation(fields: [creditCardId, userId], references: [id, userId], onDelete: NoAction)
+  items      ScheduledItem[]
+
+  @@unique([id, userId])
+}
+
+model ScheduledItem {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String          @db.Uuid
+  recurringRuleId String?         @db.Uuid
+  kind            ScheduledKind
+  name            String          @db.VarChar(60)
+  amount          BigInt
+  dueDate         DateTime        @db.Date
+  categoryId      String          @db.Uuid
+  accountId       String?         @db.Uuid
+  creditCardId    String?         @db.Uuid
+  status          ScheduledStatus @default(PENDING)
+  transactionId   String?         @db.Uuid
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recurringRule RecurringRule? @relation(fields: [recurringRuleId, userId], references: [id, userId], onDelete: NoAction)
+  category      Category       @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
+  account       Account?       @relation(fields: [accountId, userId], references: [id, userId], onDelete: NoAction)
+  creditCard    CreditCard?    @relation(fields: [creditCardId, userId], references: [id, userId], onDelete: NoAction)
+  transaction   Transaction?   @relation(fields: [transactionId, userId], references: [id, userId], onDelete: NoAction)
+
+  @@unique([recurringRuleId, dueDate])
+  @@unique([transactionId, userId])
+  @@index([userId, status, dueDate])
+}
+
+model DismissedAlert {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @db.Uuid
+  key         String   @db.VarChar(120)
+  dismissedAt DateTime @default(now()) @db.Timestamptz(3)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+}

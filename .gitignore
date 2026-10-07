@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dev-dist/
+coverage/
+apps/api/src/generated/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.superpowers/

@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/dev-dist
+**/coverage
+**/src/generated
+**/playwright-report
+**/test-results
+.git
+.env
+**/.env
+docs
+*.log
+.superpowers
+.claude

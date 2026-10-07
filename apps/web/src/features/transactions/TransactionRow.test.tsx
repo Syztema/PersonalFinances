@@ -1,0 +1,114 @@
+import type { TransactionDTO } from '@finanzas/shared';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import { TransactionRow } from './TransactionRow';
+
+const ref = (id: string, name: string) => ({ id, name, icon: 'wallet', color: '#123456' });
+const base: TransactionDTO = {
+  id: 't1',
+  type: 'EXPENSE',
+  amount: 25_000,
+  date: '2026-10-06',
+  description: null,
+  payee: null,
+  notes: null,
+  account: null,
+  toAccount: null,
+  creditCard: null,
+  debt: null,
+  category: null,
+  goalId: null,
+  installments: null,
+  paymentMethod: null,
+  method: null,
+  parentId: null,
+  interest: 0,
+  tags: [],
+  createdAt: '2026-10-06T15:00:00.000Z',
+};
+
+describe('TransactionRow', () => {
+  it('shows a card payment as a neutral payment, never as an expense (review focus #4)', () => {
+    render(
+      <TransactionRow
+        onSelect={() => undefined}
+        transaction={{
+          ...base,
+          type: 'CARD_PAYMENT',
+          amount: 500_000,
+          account: { ...ref('a1', 'Bancolombia'), type: 'BANK' },
+          creditCard: ref('c1', 'Nu Crédito'),
+        }}
+      />,
+    );
+    expect(screen.getByText('Pago tarjeta')).toBeInTheDocument();
+    expect(screen.getByText('Bancolombia → Nu Crédito')).toBeInTheDocument();
+    const amount = screen.getByText('$500.000');
+    expect(amount).not.toHaveClass('text-negative');
+    expect(screen.queryByText('-$500.000')).not.toBeInTheDocument();
+  });
+
+  it('shows expenses in red with a minus sign and their category and account', () => {
+    render(
+      <TransactionRow
+        onSelect={() => undefined}
+        transaction={{
+          ...base,
+          description: 'Almuerzo',
+          account: { ...ref('a2', 'Nequi'), type: 'DIGITAL_WALLET' },
+          category: { ...ref('k1', 'Alimentación'), kind: 'EXPENSE', parentId: null },
+        }}
+      />,
+    );
+    expect(screen.getByText('Almuerzo')).toBeInTheDocument();
+    expect(screen.getByText('Alimentación · Nequi')).toBeInTheDocument();
+    expect(screen.getByText('-$25.000')).toHaveClass('text-negative');
+  });
+
+  it('describes transfers, income and card purchases with installments', () => {
+    const { rerender } = render(
+      <TransactionRow
+        onSelect={() => undefined}
+        transaction={{
+          ...base,
+          type: 'TRANSFER',
+          amount: 200_000,
+          account: { ...ref('a1', 'Bancolombia'), type: 'BANK' },
+          toAccount: { ...ref('a2', 'Nequi'), type: 'DIGITAL_WALLET' },
+        }}
+      />,
+    );
+    expect(screen.getByText('Bancolombia → Nequi')).toBeInTheDocument();
+    expect(screen.getByText('$200.000')).not.toHaveClass('text-negative');
+
+    rerender(
+      <TransactionRow
+        onSelect={() => undefined}
+        transaction={{
+          ...base,
+          type: 'INCOME',
+          amount: 4_000_000,
+          description: 'Salario',
+          account: { ...ref('a1', 'Bancolombia'), type: 'BANK' },
+        }}
+      />,
+    );
+    expect(screen.getByText('+$4.000.000')).toHaveClass('text-positive');
+
+    rerender(
+      <TransactionRow
+        onSelect={() => undefined}
+        transaction={{
+          ...base,
+          type: 'CARD_PURCHASE',
+          amount: 150_000,
+          description: 'Amazon',
+          installments: 3,
+          creditCard: ref('c1', 'Nu Crédito'),
+        }}
+      />,
+    );
+    expect(screen.getByText('Nu Crédito · 3 cuotas')).toBeInTheDocument();
+    expect(screen.getByText('-$150.000')).toBeInTheDocument();
+  });
+});
