@@ -9,9 +9,12 @@ import { monthLabel } from '../../lib/format';
 import { qk } from '../../lib/queries';
 import { AccountsCard } from './AccountsCard';
 import { CardsSection } from './CardsSection';
+import { GoalsSection } from './GoalsSection';
 import { LoansSection } from './LoansSection';
 import { MoneySummaryCard } from './MoneySummaryCard';
 import { MonthCard } from './MonthCard';
+import { SpendingPowerCard } from './SpendingPowerCard';
+import { StatusCard } from './StatusCard';
 
 export function DashboardPage() {
   const query = useQuery({
@@ -45,11 +48,14 @@ export function DashboardPage() {
         />
       ) : (
         <>
+          <SpendingPowerCard data={d.spendingPower} />
           <MoneySummaryCard data={d} />
-          <MonthCard data={d.thisMonth} />
+          <StatusCard status={d.status} alerts={d.alerts} />
+          <MonthCard data={d.thisMonth} budget={d.budget} />
           <AccountsCard accounts={d.money.accounts} total={d.money.total} />
           <CardsSection cards={d.cards} />
           <LoansSection loans={d.loans} />
+          <GoalsSection goals={d.goals} />
         </>
       )}
     </div>

@@ -3,10 +3,12 @@ import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Amount } from '../../components/ui/Amount';
 import { Button } from '../../components/ui/Button';
+import { DeletedSection } from '../../components/ui/DeletedSection';
 import { EmptyState, ErrorState } from '../../components/ui/EmptyState';
 import { PageSpinner } from '../../components/ui/Spinner';
 import { formatShortDate } from '../../lib/format';
 import { useDebts } from '../../lib/queries';
+import { useRestore } from '../../lib/useRestore';
 import { useQuickAdd } from '../quick-add/QuickAddContext';
 import { DebtFormSheet } from './DebtFormSheet';
 import { DisbursementSheet } from './DisbursementSheet';
@@ -17,8 +19,14 @@ export function DebtsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<DebtDTO | undefined>();
   const [disbursing, setDisbursing] = useState<DebtDTO | null>(null);
+  const { restore, isRestoring } = useRestore(
+    (id) => `/debts/${id}/restore`,
+    'Préstamo restaurado',
+  );
   if (debts.isPending) return <PageSpinner />;
   if (debts.isError) return <ErrorState error={debts.error} onRetry={() => void debts.refetch()} />;
+
+  const active = debts.data.filter((d) => d.isActive);
 
   return (
     <div className="space-y-4">
@@ -35,21 +43,18 @@ export function DebtsPage() {
           <Plus size={16} /> Nuevo
         </Button>
       </div>
-      {debts.data.length === 0 ? (
+      {active.length === 0 ? (
         <EmptyState
           title="No tienes préstamos registrados"
           description="Créditos de libre inversión, vehículo o dinero que le debes a alguien."
         />
       ) : (
         <ul className="space-y-3">
-          {debts.data.map((d) => (
+          {active.map((d) => (
             <li key={d.id} className="rounded-2xl bg-surface p-4 ring-1 ring-border">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-semibold">
-                    {d.name}{' '}
-                    {!d.isActive && <span className="text-xs text-muted">(archivado)</span>}
-                  </p>
+                  <p className="font-semibold">{d.name}</p>
                   <p className="text-xs text-muted">{d.lender ?? 'Sin acreedor'}</p>
                 </div>
                 <Amount value={d.balance} tone="debt" className="font-semibold" />
@@ -70,12 +75,7 @@ export function DebtsPage() {
                 >
                   Pagar
                 </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={!d.isActive}
-                  onClick={() => setDisbursing(d)}
-                >
+                <Button size="sm" variant="secondary" onClick={() => setDisbursing(d)}>
                   Desembolso
                 </Button>
                 <Button
@@ -93,6 +93,11 @@ export function DebtsPage() {
           ))}
         </ul>
       )}
+      <DeletedSection
+        items={debts.data.filter((d) => !d.isActive)}
+        isRestoring={isRestoring}
+        onRestore={(d) => restore(d.id)}
+      />
       <DebtFormSheet open={formOpen} onOpenChange={setFormOpen} debt={editing} />
       <DisbursementSheet debt={disbursing} onClose={() => setDisbursing(null)} />
     </div>

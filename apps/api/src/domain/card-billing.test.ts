@@ -180,6 +180,27 @@ describe('cardStatus', () => {
       ),
     ).toBeNull();
   });
+
+  it('bills the initial debt at the next cutoff when the last due date already passed (addendum §2)', () => {
+    // Corte 31, pago 15: el último corte antes del 20 de octubre es el 30 de septiembre,
+    // cuyo pago venció el 15 de octubre. Al registrar la tarjeta se asume que está al día.
+    const charge = initialDebtCharge(
+      { initialDebt: 800_000, initialDebtInstallments: 1, openingDate: '2026-10-20' },
+      T31,
+    );
+    expect(charge).toEqual({ date: '2026-10-31', amount: 800_000, installments: 1 });
+    const s = cardStatus({
+      terms: T31,
+      charges: [charge!],
+      totalPayments: 0,
+      debt: 800_000,
+      today: '2026-10-20',
+    });
+    expect(s.amountDue).toBe(0);
+    expect(s.isOverdue).toBe(false);
+    expect(s.committed).toBe(800_000);
+    expect(s.nextDueDate).toBe('2026-11-15');
+  });
 });
 
 describe('exigibleAt and upcomingInstallments', () => {

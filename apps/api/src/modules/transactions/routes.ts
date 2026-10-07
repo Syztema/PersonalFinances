@@ -1,4 +1,5 @@
 import {
+  adjustBalanceSchema,
   cardPaymentBodySchema,
   cardPurchaseBodySchema,
   debtDisbursementSchema,
@@ -12,6 +13,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { parse, parseId } from '../../lib/validation';
 import { findCreditCard } from '../credit-cards/service';
 import { findDebt } from '../debts/service';
+import { adjustBalance } from './adjust';
 import { listTransactions } from './list';
 import { createTransaction, deleteTransaction, getTransaction, updateTransaction } from './service';
 
@@ -21,6 +23,19 @@ export async function transactionRoutes(app: FastifyInstance) {
 
   app.post('/transactions', async (req, reply) =>
     create(req, reply, parse(transactionSchema, req.body)),
+  );
+
+  app.post('/accounts/:id/adjust', async (req, reply) =>
+    reply
+      .status(201)
+      .send(
+        await adjustBalance(
+          app.prisma,
+          req.auth,
+          parseId(req.params),
+          parse(adjustBalanceSchema, req.body),
+        ),
+      ),
   );
 
   app.get('/transactions', async (req) =>

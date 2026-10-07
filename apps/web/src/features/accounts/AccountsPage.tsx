@@ -3,11 +3,14 @@ import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Amount } from '../../components/ui/Amount';
 import { Button } from '../../components/ui/Button';
+import { DeletedSection } from '../../components/ui/DeletedSection';
 import { EmptyState, ErrorState } from '../../components/ui/EmptyState';
 import { PageSpinner } from '../../components/ui/Spinner';
 import { Icon } from '../../lib/icons';
 import { useAccounts } from '../../lib/queries';
+import { useRestore } from '../../lib/useRestore';
 import { AccountFormSheet } from './AccountFormSheet';
+import { AdjustBalanceSheet } from './AdjustBalanceSheet';
 
 function AccountList({
   title,
@@ -57,6 +60,11 @@ export function AccountsPage() {
   const accounts = useAccounts();
   const [editing, setEditing] = useState<AccountDTO | undefined>();
   const [open, setOpen] = useState(false);
+  const [adjusting, setAdjusting] = useState<AccountDTO | null>(null);
+  const { restore, isRestoring } = useRestore(
+    (id) => `/accounts/${id}/restore`,
+    'Cuenta restaurada',
+  );
   const openForm = (a?: AccountDTO) => {
     setEditing(a);
     setOpen(true);
@@ -66,7 +74,7 @@ export function AccountsPage() {
   if (accounts.isError)
     return <ErrorState error={accounts.error} onRetry={() => void accounts.refetch()} />;
   const active = accounts.data.filter((a) => a.isActive);
-  const total = accounts.data.reduce((s, a) => s + a.balance, 0);
+  const total = active.reduce((s, a) => s + a.balance, 0);
 
   return (
     <div className="space-y-4">
@@ -76,7 +84,7 @@ export function AccountsPage() {
           <Plus size={16} /> Nueva
         </Button>
       </div>
-      {accounts.data.length === 0 ? (
+      {active.length === 0 ? (
         <EmptyState
           title="Aún no tienes cuentas"
           description="Agrega efectivo, bancos, billeteras como Nequi o Daviplata, y tus cuentas de ahorro."
@@ -97,14 +105,23 @@ export function AccountsPage() {
             accounts={active.filter((a) => !isLiquidAccount(a.type))}
             onSelect={openForm}
           />
-          <AccountList
-            title="Archivadas"
-            accounts={accounts.data.filter((a) => !a.isActive)}
-            onSelect={openForm}
-          />
         </>
       )}
-      <AccountFormSheet open={open} onOpenChange={setOpen} account={editing} />
+      <DeletedSection
+        items={accounts.data.filter((a) => !a.isActive)}
+        isRestoring={isRestoring}
+        onRestore={(a) => restore(a.id)}
+      />
+      <AccountFormSheet
+        open={open}
+        onOpenChange={setOpen}
+        account={editing}
+        onAdjust={(a) => {
+          setOpen(false);
+          setAdjusting(a);
+        }}
+      />
+      <AdjustBalanceSheet account={adjusting} onClose={() => setAdjusting(null)} />
     </div>
   );
 }

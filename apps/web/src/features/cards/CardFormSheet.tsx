@@ -1,4 +1,4 @@
-import { formatCOP, type CreditCardDTO } from '@finanzas/shared';
+import { formatCOP, type CreditCardDTO, type DeleteResultDTO } from '@finanzas/shared';
 import { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { ConfirmButton } from '../../components/ui/ConfirmButton';
@@ -64,11 +64,11 @@ function CardForm({
       card ? api.put(`/credit-cards/${card.id}`, body) : api.post('/credit-cards', body),
     card ? 'Tarjeta actualizada' : 'Tarjeta creada',
   );
-  const archive = useCrudMutation(
-    () => api.put(`/credit-cards/${card!.id}`, { isActive: !card!.isActive }),
-    card?.isActive ? 'Tarjeta archivada' : 'Tarjeta reactivada',
+  const remove = useCrudMutation(
+    () => api.del<DeleteResultDTO>(`/credit-cards/${card!.id}`),
+    (r) =>
+      r.deleted === 'soft' ? 'Tarjeta eliminada: se conserva su historial' : 'Tarjeta eliminada',
   );
-  const remove = useCrudMutation(() => api.del(`/credit-cards/${card!.id}`), 'Tarjeta eliminada');
   const onError = (err: ApiError) => {
     const mapped = toFormErrors(err, ['name', 'creditLimit', 'statementDay', 'paymentDueDay']);
     setFields(mapped);
@@ -195,15 +195,9 @@ function CardForm({
         Guardar tarjeta
       </Button>
       {card && (
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="secondary"
-            loading={archive.isPending}
-            onClick={() => archive.mutate(undefined, { onSuccess: onDone, onError })}
-          >
-            {card.isActive ? 'Archivar' : 'Reactivar'}
-          </Button>
+        <div className="space-y-2">
           <ConfirmButton
+            size="lg"
             loading={remove.isPending}
             onConfirm={() =>
               remove.mutate(undefined, {
@@ -215,8 +209,12 @@ function CardForm({
               })
             }
           >
-            Eliminar
+            Eliminar tarjeta
           </ConfirmButton>
+          <p className="text-xs text-muted">
+            Para eliminarla debe tener deuda $0. Si tiene movimientos, se oculta y su historial se
+            conserva.
+          </p>
         </div>
       )}
     </form>

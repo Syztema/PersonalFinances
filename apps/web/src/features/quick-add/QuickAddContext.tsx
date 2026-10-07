@@ -2,7 +2,14 @@ import type { TransactionDTO } from '@finanzas/shared';
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 
 export type QuickAddKind =
-  'menu' | 'expense' | 'income' | 'transfer' | 'card-purchase' | 'card-payment' | 'loan-payment';
+  | 'menu'
+  | 'expense'
+  | 'income'
+  | 'transfer'
+  | 'card-purchase'
+  | 'card-payment'
+  | 'loan-payment'
+  | 'disbursement';
 
 export interface QuickAddRequest {
   kind: QuickAddKind;

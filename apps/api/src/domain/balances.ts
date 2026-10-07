@@ -56,3 +56,13 @@ export function monthFlows(
     remaining: totals.income - totals.expense - savings - investment,
   };
 }
+
+/** Spec 8.8: recibido + esperado pendiente del mes; si ambos son 0, la estimación del usuario. */
+export function projectedIncome(
+  received: number,
+  expectedPending: number,
+  estimate: number | null,
+): number {
+  const total = received + expectedPending;
+  return total > 0 ? total : (estimate ?? 0);
+}

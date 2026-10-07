@@ -2,6 +2,7 @@ import type { TransactionDTO } from '@finanzas/shared';
 import { useState } from 'react';
 import { Amount } from '../../components/ui/Amount';
 import { Button } from '../../components/ui/Button';
+import { FrozenLocked } from '../../components/ui/FrozenNote';
 import { Chips } from '../../components/ui/Chips';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Field, Select } from '../../components/ui/Field';
@@ -9,6 +10,7 @@ import { MoneyInput } from '../../components/ui/MoneyInput';
 import { PageSpinner } from '../../components/ui/Spinner';
 import { formatShortDate } from '../../lib/format';
 import { useAccounts, useCards } from '../../lib/queries';
+import { frozenHolder } from '../../lib/refs';
 import { useToday } from '../auth/useAuth';
 import { DateChips } from './DateChips';
 import { NeedsAccount } from './NeedsAccount';
@@ -33,8 +35,10 @@ export function PayCardForm({
   const [amount, setAmount] = useState<number | null>(edit?.amount ?? null);
   const [date, setDate] = useState(edit?.date ?? today);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const frozen = frozenHolder(edit);
 
   if (cards.isPending || accounts.isPending) return <PageSpinner />;
+  if (frozen) return <FrozenLocked holder={frozen} onClose={onDone} />;
   const cardList = (cards.data ?? []).filter((c) => c.isActive || c.id === edit?.creditCard?.id);
   const accountList = (accounts.data ?? []).filter((a) => a.isActive || a.id === edit?.account?.id);
   if (cardList.length === 0)

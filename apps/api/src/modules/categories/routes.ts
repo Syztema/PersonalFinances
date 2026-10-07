@@ -1,7 +1,13 @@
 import { categoryCreateSchema, categoryUpdateSchema } from '@finanzas/shared';
 import type { FastifyInstance } from 'fastify';
 import { parse, parseId } from '../../lib/validation';
-import { createCategory, deleteCategory, listCategories, updateCategory } from './service';
+import {
+  createCategory,
+  deleteCategory,
+  listCategories,
+  restoreCategory,
+  updateCategory,
+} from './service';
 
 export async function categoryRoutes(app: FastifyInstance) {
   app.get('/categories', async (req) => ({
@@ -26,8 +32,11 @@ export async function categoryRoutes(app: FastifyInstance) {
     ),
   }));
 
-  app.delete('/categories/:id', async (req, reply) => {
-    await deleteCategory(app.prisma, req.auth.userId, parseId(req.params));
-    return reply.status(204).send();
-  });
+  app.delete('/categories/:id', async (req) =>
+    deleteCategory(app.prisma, req.auth, parseId(req.params)),
+  );
+
+  app.post('/categories/:id/restore', async (req) => ({
+    category: await restoreCategory(app.prisma, req.auth.userId, parseId(req.params)),
+  }));
 }

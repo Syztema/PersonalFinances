@@ -14,6 +14,8 @@
   --color-positive: var(--positive);
   --color-negative: var(--negative);
   --color-warning: var(--warning);
+  --color-negative-fg: var(--negative-fg);
+  --color-warning-fg: var(--warning-fg);
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
@@ -30,7 +32,27 @@
   --positive: #15803d;
   --negative: #be123c;
   --warning: #b45309;
+  --negative-fg: #ffffff;
+  --warning-fg: #ffffff;
   color-scheme: light;
+}
+
+/* Addendum §5: paleta oscura (contraste AA). La clase la pone public/theme-init.js. */
+:root.dark {
+  --bg: #0b1016;
+  --surface: #121a22;
+  --surface-2: #1a2430;
+  --border: #263241;
+  --fg: #e6edf3;
+  --muted: #93a1b0;
+  --primary: #2dd4bf;
+  --primary-fg: #04201c;
+  --positive: #4ade80;
+  --negative: #fb7185;
+  --negative-fg: #1f0710;
+  --warning: #fbbf24;
+  --warning-fg: #1f1300;
+  color-scheme: dark;
 }
 
 html {

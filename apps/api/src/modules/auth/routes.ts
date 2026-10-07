@@ -6,7 +6,7 @@ import {
   resetPasswordSchema,
 } from '@finanzas/shared';
 import type { FastifyInstance } from 'fastify';
-import { AppError } from '../../lib/errors';
+import { AppError, tooManyAttempts } from '../../lib/errors';
 import { AttemptLimiter } from '../../lib/attempt-limiter';
 import { parse } from '../../lib/validation';
 import { clearSessionCookie, SESSION_COOKIE, setSessionCookie } from '../../plugins/session';
@@ -38,13 +38,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/login', async (req, reply) => {
     const input = parse(loginSchema, req.body);
     const key = `${req.ip}:${input.email}`;
-    if (loginLimiter.isBlocked(key)) {
-      throw new AppError(
-        429,
-        'TOO_MANY_ATTEMPTS',
-        'Demasiados intentos. Espera 15 minutos e intenta de nuevo.',
-      );
-    }
+    if (loginLimiter.isBlocked(key)) throw tooManyAttempts();
     const user = await authenticateUser(app.prisma, input.email, input.password);
     if (!user) {
       loginLimiter.hit(key);
@@ -87,7 +81,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post('/change-password', { preHandler: app.authenticate }, async (req, reply) => {
     const input = parse(changePasswordSchema, req.body);
-    await changePassword(app.prisma, req.auth, input);
+    await changePassword(app.prisma, req.auth, input, app.passwordLimiter);
     return reply.status(204).send();
   });
 }

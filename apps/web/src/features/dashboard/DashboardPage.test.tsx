@@ -33,6 +33,21 @@ const base: DashboardDTO = {
   },
   cards: [],
   loans: [],
+  spendingPower: {
+    daily: 0,
+    spentToday: 0,
+    remainingToday: 0,
+    limitedBy: 'LIQUIDITY',
+    reason: null,
+    breakdown: {
+      liquidity: { daily: 0, bindingDate: '2026-10-31', days: 12, items: [] },
+      budget: null,
+    },
+  },
+  status: { level: 'OK', title: 'Vas bien', message: '' },
+  alerts: [],
+  goals: [],
+  budget: null,
 };
 
 const account = (
@@ -152,5 +167,157 @@ describe('DashboardPage', () => {
     });
     const el = await screen.findByText('-$1.000.000');
     expect(el).toHaveClass('text-negative');
+  });
+
+  it('shows how much I can spend today and explains it', async () => {
+    renderDashboard({
+      ...base,
+      money: { ...base.money, accounts: [account('a1', 'Bancolombia', 'BANK', 2_500_000)] },
+      spendingPower: {
+        daily: 45_400,
+        spentToday: 20_000,
+        remainingToday: 25_400,
+        limitedBy: 'BUDGET',
+        reason: null,
+        breakdown: {
+          liquidity: {
+            daily: 60_000,
+            bindingDate: '2026-10-24',
+            days: 5,
+            items: [
+              { key: 'liquid', label: 'Dinero líquido', amount: 300_000 },
+              { key: 'obligations', label: 'Obligaciones pendientes', amount: 0 },
+            ],
+          },
+          budget: {
+            daily: 45_400,
+            days: 12,
+            items: [{ key: 'budget', label: 'Presupuesto del mes', amount: 2_000_000 }],
+          },
+        },
+      },
+    });
+    expect(await screen.findByText('¿Cuánto puedo gastar hoy?')).toBeInTheDocument();
+    expect(screen.getByText('$45.400')).toBeInTheDocument();
+    expect(screen.getByText('Te quedan hoy')).toBeInTheDocument();
+    expect(screen.getByText('$25.400')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /¿Cómo se calcula\?/ }));
+    expect(
+      await screen.findByText('Hasta el 24 oct (5 días): $60.000 por día'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Presupuesto del mes')).toBeInTheDocument();
+    expect(screen.queryByText('Obligaciones pendientes')).not.toBeInTheDocument();
+    expect(screen.getByText(/Se usa el menor/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/No incluye pagos de obligaciones programadas ni ajustes de saldo\./),
+    ).toBeInTheDocument();
+  });
+
+  it('says when today was overspent or there is no margin', async () => {
+    renderDashboard({
+      ...base,
+      money: { ...base.money, accounts: [account('a1', 'Bancolombia', 'BANK', 100_000)] },
+      spendingPower: {
+        ...base.spendingPower,
+        daily: 0,
+        spentToday: 5_000,
+        remainingToday: -5_000,
+        reason: 'Tu presupuesto del mes no deja margen para hoy.',
+      },
+    });
+    expect(await screen.findByText('Hoy te pasaste')).toBeInTheDocument();
+    expect(
+      screen.getByText('Hoy no tienes margen. Tu presupuesto del mes no deja margen para hoy.'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the status with the main alerts, the budget and the goals', async () => {
+    renderDashboard({
+      ...base,
+      money: { ...base.money, accounts: [account('a1', 'Bancolombia', 'BANK', 2_500_000)] },
+      status: {
+        level: 'WARNING',
+        title: 'Cuidado',
+        message: 'Has utilizado el 78 % de tu presupuesto.',
+      },
+      alerts: [
+        {
+          key: 'budget:2026-10:total:75',
+          level: 'WARNING',
+          title: 'Llevas el 78 % del presupuesto',
+          message: 'Has gastado $1.560.000 de $2.000.000.',
+          href: '/budgets',
+        },
+      ],
+      budget: { budget: 2_000_000, spent: 1_560_000, usage: 0.78, projectionExceedsOnDay: 26 },
+      goals: [
+        {
+          id: 'g1',
+          name: 'Comprar computador',
+          targetAmount: 5_000_000,
+          targetDate: '2027-06-30',
+          account: {
+            id: 'a2',
+            name: 'Ahorro',
+            icon: 'piggy-bank',
+            color: '#0ea5e9',
+            isActive: true,
+            type: 'SAVINGS',
+          },
+          initialAmount: 1_000_000,
+          status: 'ACTIVE',
+          icon: 'laptop',
+          color: '#0ea5e9',
+          contributed: 400_000,
+          withdrawn: 0,
+          progress: 1_400_000,
+          pct: 0.28,
+          remaining: 3_600_000,
+          monthlyNeeded: 450_000,
+          weeklyNeeded: 94_737,
+        },
+      ],
+    });
+    expect(await screen.findByText('Cuidado')).toBeInTheDocument();
+    expect(screen.getByText('Llevas el 78 % del presupuesto')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ver todas las alertas' })).toHaveAttribute(
+      'href',
+      '/alerts',
+    );
+    expect(screen.getByRole('progressbar', { name: 'Uso del presupuesto' })).toHaveAttribute(
+      'aria-valuenow',
+      '78',
+    );
+    expect(
+      screen.getByText('A este ritmo superarías el presupuesto el día 26.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('progressbar', { name: 'Avance de Comprar computador' }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('SpendingPowerSheet without a budget (final review M2)', () => {
+  it('does not say the lower limit is used when there is only one limit', async () => {
+    renderDashboard({
+      ...base,
+      money: { ...base.money, accounts: [account('a1', 'Bancolombia', 'BANK', 2_500_000)] },
+      spendingPower: {
+        ...base.spendingPower,
+        daily: 30_000,
+        remainingToday: 30_000,
+        limitedBy: 'LIQUIDITY',
+        breakdown: {
+          liquidity: { daily: 30_000, bindingDate: '2026-10-24', days: 5, items: [] },
+          budget: null,
+        },
+      },
+    });
+    await userEvent.click(await screen.findByRole('button', { name: /¿Cómo se calcula\?/ }));
+    expect(
+      await screen.findByText('Hasta el 24 oct (5 días): $30.000 por día'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Se usa el menor/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Resultado:/)).toBeInTheDocument();
   });
 });

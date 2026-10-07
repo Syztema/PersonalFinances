@@ -9,6 +9,9 @@ import { useToast } from '../../components/ui/Toast';
 import { api, ApiError } from '../../lib/api';
 import { qk } from '../../lib/queries';
 import { useLogout, useMe } from '../auth/useAuth';
+import { DeleteAccountCard } from './DeleteAccountCard';
+import { EmailCard } from './EmailCard';
+import { ThemeCard } from './ThemeCard';
 
 export function ProfilePage() {
   const me = useMe();
@@ -59,6 +62,7 @@ function ProfileContent({ user }: { user: UserDTO }) {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Perfil y seguridad</h1>
+      <ThemeCard user={user} />
       <Card>
         <CardTitle>Tus datos</CardTitle>
         <form
@@ -76,7 +80,6 @@ function ProfileContent({ user }: { user: UserDTO }) {
               onChange={(e) => setName(e.target.value)}
             />
           </Field>
-          <p className="text-sm text-muted">Email: {user.email}</p>
           {nameError && (
             <p role="alert" className="text-sm text-negative">
               {nameError}
@@ -91,6 +94,7 @@ function ProfileContent({ user }: { user: UserDTO }) {
           </Button>
         </form>
       </Card>
+      <EmailCard user={user} />
       <Card>
         <CardTitle>Cambiar contraseña</CardTitle>
         <form
@@ -150,6 +154,7 @@ function ProfileContent({ user }: { user: UserDTO }) {
       >
         Cerrar sesión
       </Button>
+      <DeleteAccountCard />
     </div>
   );
 }

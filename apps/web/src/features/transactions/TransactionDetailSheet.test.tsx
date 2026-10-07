@@ -13,10 +13,17 @@ const disbursement: TransactionDTO = {
   description: null,
   payee: null,
   notes: null,
-  account: { id: 'a1', name: 'Bancolombia', icon: 'wallet', color: '#123456', type: 'BANK' },
+  account: {
+    id: 'a1',
+    name: 'Bancolombia',
+    icon: 'wallet',
+    color: '#123456',
+    type: 'BANK',
+    isActive: true,
+  },
   toAccount: null,
   creditCard: null,
-  debt: { id: 'd1', name: 'Préstamo', icon: 'landmark', color: '#123456' },
+  debt: { id: 'd1', name: 'Préstamo', icon: 'landmark', color: '#123456', isActive: true },
   category: null,
   goalId: null,
   installments: null,
@@ -29,13 +36,13 @@ const disbursement: TransactionDTO = {
 };
 
 describe('TransactionDetailSheet', () => {
-  it('offers delete but not edit for a loan disbursement', () => {
+  it('offers edit and delete for a loan disbursement', () => {
     renderWithProviders(
       <QuickAddProvider>
         <TransactionDetailSheet transaction={disbursement} onClose={() => undefined} />
       </QuickAddProvider>,
     );
     expect(screen.getByRole('button', { name: 'Eliminar' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument();
   });
 });

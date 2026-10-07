@@ -4,6 +4,7 @@ import {
   type Bucket,
   type CategoryDTO,
   type CategoryKind,
+  type DeleteResultDTO,
 } from '@finanzas/shared';
 import { useState } from 'react';
 import { Button } from '../../components/ui/Button';
@@ -61,7 +62,7 @@ function CategoryForm({
   const [fields, setFields] = useState<Record<string, string>>({});
 
   const parents = (categories.data ?? []).filter(
-    (c) => c.kind === kind && !c.parentId && !c.isSystem && c.id !== category?.id,
+    (c) => c.kind === kind && !c.parentId && !c.isSystem && c.isActive && c.id !== category?.id,
   );
   const parentBucket = parents.find((p) => p.id === parentId)?.bucket;
   const shownBucket = !category && !bucketTouched && parentBucket ? parentBucket : bucket;
@@ -70,13 +71,12 @@ function CategoryForm({
       category ? api.put(`/categories/${category.id}`, body) : api.post('/categories', body),
     category ? 'Categoría actualizada' : 'Categoría creada',
   );
-  const archive = useCrudMutation(
-    () => api.put(`/categories/${category!.id}`, { isActive: !category!.isActive }),
-    category?.isActive ? 'Categoría archivada' : 'Categoría reactivada',
-  );
   const remove = useCrudMutation(
-    () => api.del(`/categories/${category!.id}`),
-    'Categoría eliminada',
+    () => api.del<DeleteResultDTO>(`/categories/${category!.id}`),
+    (r) =>
+      r.deleted === 'soft'
+        ? 'Categoría eliminada: se conserva su historial'
+        : 'Categoría eliminada',
   );
   const onError = (err: ApiError) => {
     const mapped = toFormErrors(err, ['name', 'parentId']);
@@ -117,9 +117,18 @@ function CategoryForm({
         label="Categoría principal (opcional)"
         htmlFor="cat-parent"
         error={fields.parentId}
-        hint="Déjala vacía para crear una categoría principal."
+        hint={
+          category?.systemKey != null
+            ? 'Las categorías del sistema no pueden ser subcategorías.'
+            : 'Déjala vacía para crear una categoría principal.'
+        }
       >
-        <Select id="cat-parent" value={parentId} onChange={(e) => setParentId(e.target.value)}>
+        <Select
+          id="cat-parent"
+          disabled={category?.systemKey != null}
+          value={parentId}
+          onChange={(e) => setParentId(e.target.value)}
+        >
           <option value="">Ninguna</option>
           {parents.map((p) => (
             <option key={p.id} value={p.id}>
@@ -167,21 +176,18 @@ function CategoryForm({
         Guardar categoría
       </Button>
       {category && (
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="secondary"
-            loading={archive.isPending}
-            onClick={() => archive.mutate(undefined, { onSuccess: onDone, onError })}
-          >
-            {category.isActive ? 'Archivar' : 'Reactivar'}
-          </Button>
+        <div className="space-y-2">
           <ConfirmButton
-            disabled={!!category.systemKey}
+            size="lg"
             loading={remove.isPending}
             onConfirm={() => remove.mutate(undefined, { onSuccess: onDone, onError })}
           >
-            Eliminar
+            Eliminar categoría
           </ConfirmButton>
+          <p className="text-xs text-muted">
+            Se elimina con sus subcategorías. Los movimientos la conservan en el historial; si la
+            app la necesita, la restaura sola.
+          </p>
         </div>
       )}
     </form>

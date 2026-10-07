@@ -48,3 +48,7 @@ export function dayHeading(iso: IsoDate, today: IsoDate): string {
   const year = iso.slice(0, 4) !== today.slice(0, 4) ? ` de ${iso.slice(0, 4)}` : '';
   return `${weekday} ${Number(iso.slice(8, 10))} de ${MONTHS[monthIndex(iso)]}${year}`;
 }
+
+/** `octubre de 2026` */
+export const formatMonthYear = (key: string) =>
+  `${MONTHS[monthIndex(key)] ?? key} de ${key.slice(0, 4)}`;

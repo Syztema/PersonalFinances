@@ -46,30 +46,18 @@ describe('accounts', () => {
     expect(bad.body.error.fields.color).toBeTypeOf('string');
   });
 
-  it('only archives accounts with a zero balance', async () => {
+  it('does not accept isActive in updates (DELETE and /restore manage it)', async () => {
     const { api } = await registerUser(app);
-    const { body } = await api.post('/api/accounts', {
-      name: 'Efectivo',
-      type: 'CASH',
-      initialBalance: 50_000,
-    });
-    const id = body.account.id;
-    const archive = await api.put(`/api/accounts/${id}`, { isActive: false });
-    expect(archive.status).toBe(409);
-    expect(archive.body.error.code).toBe('ACCOUNT_HAS_BALANCE');
-    const ok = await api.put(`/api/accounts/${id}`, {
-      initialBalance: 0,
-      isActive: false,
-      color: '#00aa00',
-    });
-    expect(ok.status).toBe(200);
-    expect(ok.body.account).toMatchObject({ isActive: false, color: '#00aa00', balance: 0 });
+    const { body } = await api.post('/api/accounts', { name: 'Efectivo', type: 'CASH' });
+    expect((await api.put(`/api/accounts/${body.account.id}`, { isActive: false })).status).toBe(
+      400,
+    );
   });
 
   it('deletes unused accounts and answers 404 for unknown or malformed ids', async () => {
     const { api } = await registerUser(app);
     const { body } = await api.post('/api/accounts', { name: 'Daviplata', type: 'DIGITAL_WALLET' });
-    expect((await api.del(`/api/accounts/${body.account.id}`)).status).toBe(204);
+    expect((await api.del(`/api/accounts/${body.account.id}`)).status).toBe(200);
     expect((await api.get(`/api/accounts/${body.account.id}`)).status).toBe(404);
     expect((await api.get('/api/accounts/no-es-uuid')).status).toBe(404);
   });

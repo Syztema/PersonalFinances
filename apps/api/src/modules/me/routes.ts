@@ -1,12 +1,22 @@
-import { updateMeSchema } from '@finanzas/shared';
+import { deleteMeSchema, updateMeSchema } from '@finanzas/shared';
 import type { FastifyInstance } from 'fastify';
 import { parse } from '../../lib/validation';
-import { toUserDTO } from '../auth/service';
+import { clearSessionCookie } from '../../plugins/session';
+import { deleteMe, updateMe } from './service';
 
 export async function meRoutes(app: FastifyInstance) {
-  app.patch('/me', async (req) => {
-    const input = parse(updateMeSchema, req.body);
-    const user = await app.prisma.user.update({ where: { id: req.auth.userId }, data: input });
-    return { user: toUserDTO(user) };
+  app.patch('/me', async (req) => ({
+    user: await updateMe(
+      app.prisma,
+      req.auth,
+      parse(updateMeSchema, req.body),
+      app.passwordLimiter,
+    ),
+  }));
+
+  app.delete('/me', async (req, reply) => {
+    await deleteMe(app.prisma, req.auth, parse(deleteMeSchema, req.body), app.passwordLimiter);
+    clearSessionCookie(reply);
+    return reply.status(204).send();
   });
 }

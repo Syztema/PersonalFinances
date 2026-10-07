@@ -57,17 +57,19 @@ export function billedThrough(charges: CardCharge[], cutoff: IsoDate, terms: Car
   return total;
 }
 
-/** La deuda que ya tenía la tarjeta al registrarla se considera facturada en el último corte previo. */
+/**
+ * La deuda que ya tenía la tarjeta al registrarla se factura en el último corte previo; si el pago
+ * de ese corte ya venció, se asume que la tarjeta está al día y se factura en el corte siguiente.
+ */
 export function initialDebtCharge(
   card: { initialDebt: number; initialDebtInstallments: number; openingDate: IsoDate },
   terms: CardTerms,
 ): CardCharge | null {
   if (card.initialDebt <= 0) return null;
-  return {
-    date: cutoffOnOrBefore(card.openingDate, terms),
-    amount: card.initialDebt,
-    installments: card.initialDebtInstallments,
-  };
+  const last = cutoffOnOrBefore(card.openingDate, terms);
+  const date =
+    dueDateForCutoff(last, terms) < card.openingDate ? shiftCutoff(last, 1, terms) : last;
+  return { date, amount: card.initialDebt, installments: card.initialDebtInstallments };
 }
 
 export interface CardBillingInput {

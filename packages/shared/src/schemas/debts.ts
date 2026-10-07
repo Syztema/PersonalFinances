@@ -38,7 +38,6 @@ export const debtUpdateSchema = z.strictObject({
   paymentDay: zDayOfMonth.nullable().optional(),
   icon: zIcon.optional(),
   color: zColor.optional(),
-  isActive: z.boolean().optional(),
 });
 
 export const debtPaymentSchema = z.strictObject({

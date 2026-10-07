@@ -4,7 +4,11 @@ import type {
   Bucket,
   CategoryKind,
   DerivedMethod,
+  Frequency,
+  GoalStatus,
   PaymentMethod,
+  ScheduledKind,
+  ScheduledStatus,
   Theme,
   TransactionType,
 } from './enums';
@@ -32,6 +36,8 @@ export interface RefDTO {
   name: string;
   icon: string;
   color: string;
+  /** false si fue eliminada (la interfaz muestra "(eliminada)"). */
+  isActive: boolean;
 }
 export interface AccountRefDTO extends RefDTO {
   type: AccountType;
@@ -195,4 +201,161 @@ export interface DashboardDTO {
   };
   cards: CreditCardDTO[];
   loans: DebtDTO[];
+  spendingPower: SpendingPowerDTO;
+  status: StatusDTO;
+  /** Las 3 alertas principales no descartadas. */
+  alerts: AlertDTO[];
+  /** Metas activas (máximo 3). */
+  goals: GoalDTO[];
+  budget: DashboardBudgetDTO | null;
+}
+
+export interface DeleteResultDTO {
+  deleted: 'hard' | 'soft';
+}
+
+export interface AdjustBalanceResultDTO {
+  transaction: TransactionDTO;
+  account: AccountDTO;
+}
+
+export interface FinancialSettingsDTO {
+  obligationsPct: number;
+  savingsPct: number;
+  investmentPct: number;
+  leisurePct: number;
+  otherPct: number;
+  monthlyIncomeEstimate: number | null;
+  lowBalanceThreshold: number;
+}
+
+export type BucketKey = 'OBLIGATIONS' | 'SAVINGS' | 'INVESTMENT' | 'LEISURE' | 'OTHER';
+
+export interface BucketProgressDTO {
+  key: BucketKey;
+  label: string;
+  pct: number;
+  /** pct × ingreso proyectado del mes. */
+  target: number;
+  actual: number;
+}
+
+export interface FinancialSettingsResponse {
+  settings: FinancialSettingsDTO;
+  month: { key: string; projectedIncome: number; buckets: BucketProgressDTO[] };
+}
+
+export interface BudgetLineDTO {
+  id: string;
+  category: CategoryRefDTO;
+  amount: number;
+  spent: number;
+  remaining: number;
+  usage: number;
+}
+
+export interface BudgetDTO {
+  month: string;
+  totalAmount: number | null;
+  lines: BudgetLineDTO[];
+  /** null si el mes no tiene presupuesto. */
+  total: { budget: number; spent: number; remaining: number; usage: number } | null;
+  /** Solo en el mes en curso. */
+  projection: { projectedSpend: number; exceedsOnDay: number | null } | null;
+  daysLeft: number | null;
+  /** Mes del que se copió en esta consulta, o null. */
+  copiedFrom: string | null;
+}
+
+export interface GoalDTO {
+  id: string;
+  name: string;
+  targetAmount: number;
+  targetDate: IsoDate | null;
+  account: AccountRefDTO;
+  initialAmount: number;
+  status: GoalStatus;
+  icon: string;
+  color: string;
+  contributed: number;
+  withdrawn: number;
+  progress: number;
+  pct: number;
+  remaining: number;
+  monthlyNeeded: number | null;
+  weeklyNeeded: number | null;
+}
+
+export interface RecurringRuleDTO {
+  id: string;
+  name: string;
+  kind: ScheduledKind;
+  amount: number;
+  category: CategoryRefDTO;
+  account: AccountRefDTO | null;
+  creditCard: RefDTO | null;
+  frequency: Frequency;
+  intervalDays: number | null;
+  day1: number | null;
+  day2: number | null;
+  startDate: IsoDate;
+  endDate: IsoDate | null;
+  isActive: boolean;
+  nextDate: IsoDate | null;
+}
+
+export interface ScheduledItemDTO {
+  /** UUID; en los derivados, `card:<id>` o `loan:<id>`. */
+  id: string;
+  kind: ScheduledKind;
+  name: string;
+  amount: number;
+  dueDate: IsoDate;
+  ruleDate: IsoDate | null;
+  status: ScheduledStatus;
+  category: CategoryRefDTO | null;
+  account: AccountRefDTO | null;
+  creditCard: RefDTO | null;
+  recurringRuleId: string | null;
+  transactionId: string | null;
+  /** Vencimientos calculados de tarjetas y préstamos (solo lectura). */
+  derived: 'CARD' | 'LOAN' | null;
+  sourceId: string | null;
+}
+
+export type AlertLevel = 'INFO' | 'WARNING' | 'DANGER';
+
+export interface AlertDTO {
+  key: string;
+  level: AlertLevel;
+  title: string;
+  message: string;
+  href: string | null;
+}
+
+export interface StatusDTO {
+  level: 'OK' | 'WARNING' | 'DANGER';
+  title: string;
+  message: string;
+}
+
+export interface SpendingPowerDTO {
+  daily: number;
+  spentToday: number;
+  /** daily − spentToday; negativo = "Hoy te pasaste". */
+  remainingToday: number;
+  limitedBy: 'LIQUIDITY' | 'BUDGET';
+  /** Causa principal cuando daily = 0. */
+  reason: string | null;
+  breakdown: {
+    liquidity: { daily: number; bindingDate: IsoDate; days: number; items: BreakdownItem[] };
+    budget: { daily: number; days: number; items: BreakdownItem[] } | null;
+  };
+}
+
+export interface DashboardBudgetDTO {
+  budget: number;
+  spent: number;
+  usage: number;
+  projectionExceedsOnDay: number | null;
 }

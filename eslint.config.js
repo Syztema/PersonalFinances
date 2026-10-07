@@ -32,6 +32,10 @@ export default tseslint.config(
     },
   },
   {
+    files: ['apps/web/public/**/*.js'],
+    languageOptions: { globals: globals.browser, sourceType: 'script' },
+  },
+  {
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'error',

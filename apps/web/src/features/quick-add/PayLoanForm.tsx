@@ -2,12 +2,14 @@ import type { TransactionDTO } from '@finanzas/shared';
 import { useState } from 'react';
 import { Amount } from '../../components/ui/Amount';
 import { Button } from '../../components/ui/Button';
+import { FrozenLocked } from '../../components/ui/FrozenNote';
 import { Chips } from '../../components/ui/Chips';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Field, Select } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { PageSpinner } from '../../components/ui/Spinner';
 import { useAccounts, useDebts } from '../../lib/queries';
+import { frozenHolder } from '../../lib/refs';
 import { useToday } from '../auth/useAuth';
 import { DateChips } from './DateChips';
 import { NeedsAccount } from './NeedsAccount';
@@ -33,8 +35,10 @@ export function PayLoanForm({
   const [interest, setInterest] = useState<number | null>(edit?.interest || null);
   const [date, setDate] = useState(edit?.date ?? today);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const frozen = frozenHolder(edit);
 
   if (debts.isPending || accounts.isPending) return <PageSpinner />;
+  if (frozen) return <FrozenLocked holder={frozen} onClose={onDone} />;
   const debtList = (debts.data ?? []).filter((d) => d.isActive || d.id === edit?.debt?.id);
   const accountList = (accounts.data ?? []).filter((a) => a.isActive || a.id === edit?.account?.id);
   if (debtList.length === 0)

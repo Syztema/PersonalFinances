@@ -9,3 +9,5 @@ export * from './schemas/categories';
 export * from './schemas/credit-cards';
 export * from './schemas/debts';
 export * from './schemas/transactions';
+export * from './schemas/planning';
+export * from './schemas/tags';

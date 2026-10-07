@@ -1,16 +1,18 @@
 import {
   endOfMonth,
+  formatCOP,
   startOfMonth,
   type DebtCreateInput,
   type DebtDTO,
   type DebtUpdateInput,
+  type DeleteResultDTO,
   type IsoDate,
 } from '@finanzas/shared';
 import { applyLedger } from '../../domain/ledger';
-import { loanInstallmentDue, nextLoanPaymentDate } from '../../domain/loans';
+import { loanInstallmentDue, nextLoanPaymentDate, type LoanTerms } from '../../domain/loans';
 import type { Debt, PrismaClient } from '../../generated/prisma/client';
 import { fromDbDate, num, toDbDate } from '../../lib/db';
-import { badRequest, conflict, isUniqueViolation, notFound } from '../../lib/errors';
+import { badRequest, conflict, entityDeleted, isUniqueViolation, notFound } from '../../lib/errors';
 import type { DbClient } from '../../lib/prisma';
 import type { AuthContext } from '../../types/fastify';
 import { ledgerEntries } from '../ledger/repository';
@@ -22,6 +24,19 @@ export interface DebtLedger {
 }
 
 const NAME_TAKEN = () => conflict('DEBT_NAME_TAKEN', 'Ya tienes un préstamo con ese nombre.');
+
+async function nameTaken(db: DbClient, userId: string, name: string) {
+  const other = await db.debt.findUnique({
+    where: { userId_name: { userId, name } },
+    select: { isActive: true },
+  });
+  return other && !other.isActive
+    ? conflict(
+        'DEBT_NAME_TAKEN',
+        'Ya tienes un préstamo eliminado con ese nombre. Restáuralo desde Eliminados.',
+      )
+    : NAME_TAKEN();
+}
 
 export async function loadDebtLedgers(
   db: DbClient,
@@ -72,16 +87,19 @@ export async function loadDebtLedgers(
   return ledgers;
 }
 
-export function toDebtDTO(debt: Debt, ledger: DebtLedger | undefined, today: IsoDate): DebtDTO {
+export function loanTermsOf(debt: Debt, ledger: DebtLedger | undefined): LoanTerms {
   const l = ledger ?? { disbursed: 0, paid: 0, paidThisMonth: 0 };
-  const balance = num(debt.initialBalance) + l.disbursed - l.paid;
-  const terms = {
-    balance,
+  return {
+    balance: num(debt.initialBalance) + l.disbursed - l.paid,
     monthlyPayment: debt.monthlyPayment != null ? num(debt.monthlyPayment) : null,
     paymentDay: debt.paymentDay,
     paidThisMonth: l.paidThisMonth,
     openingDate: fromDbDate(debt.openingDate),
   };
+}
+
+export function toDebtDTO(debt: Debt, ledger: DebtLedger | undefined, today: IsoDate): DebtDTO {
+  const terms = loanTermsOf(debt, ledger);
   return {
     id: debt.id,
     name: debt.name,
@@ -93,7 +111,7 @@ export function toDebtDTO(debt: Debt, ledger: DebtLedger | undefined, today: Iso
     icon: debt.icon,
     color: debt.color,
     isActive: debt.isActive,
-    balance,
+    balance: terms.balance,
     installmentDue: loanInstallmentDue(terms, today, endOfMonth(today)),
     nextPaymentDate: nextLoanPaymentDate(terms, today),
   };
@@ -121,6 +139,21 @@ export async function listDebts(db: DbClient, userId: string, today: IsoDate): P
     loadDebtLedgers(db, userId, today),
   ]);
   return debts.map((d) => toDebtDTO(d, ledgers.get(d.id), today));
+}
+
+export async function debtsWithTerms(
+  db: DbClient,
+  userId: string,
+  today: IsoDate,
+): Promise<Array<{ debt: DebtDTO; terms: LoanTerms }>> {
+  const [debts, ledgers] = await Promise.all([
+    db.debt.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+    loadDebtLedgers(db, userId, today),
+  ]);
+  return debts.map((d) => ({
+    debt: toDebtDTO(d, ledgers.get(d.id), today),
+    terms: loanTermsOf(d, ledgers.get(d.id)),
+  }));
 }
 
 export async function getDebt(db: DbClient, userId: string, id: string, today: IsoDate) {
@@ -181,7 +214,7 @@ export async function createDebt(
     });
     return getDebt(db, auth.userId, debt.id, auth.today);
   } catch (err) {
-    if (isUniqueViolation(err)) throw NAME_TAKEN();
+    if (isUniqueViolation(err)) throw await nameTaken(db, auth.userId, input.name);
     throw err;
   }
 }
@@ -193,13 +226,7 @@ export async function updateDebt(
   input: DebtUpdateInput,
 ) {
   const debt = await findDebt(db, auth.userId, id);
-  if (input.isActive === false && debt.isActive) {
-    const initialChange =
-      input.initialBalance !== undefined ? input.initialBalance - num(debt.initialBalance) : 0;
-    if ((await loanBalance(db, auth.userId, debt)) + initialChange !== 0) {
-      throw conflict('DEBT_HAS_BALANCE', 'Solo puedes archivar un préstamo pagado por completo.');
-    }
-  }
+  if (!debt.isActive) throw entityDeleted(debt.name, 'editarlo');
   try {
     await db.debt.update({
       where: { id_userId: { id, userId: auth.userId } },
@@ -218,23 +245,43 @@ export async function updateDebt(
         paymentDay: input.paymentDay,
         icon: input.icon,
         color: input.color,
-        isActive: input.isActive,
       },
     });
   } catch (err) {
-    if (isUniqueViolation(err)) throw NAME_TAKEN();
+    if (isUniqueViolation(err)) throw await nameTaken(db, auth.userId, input.name ?? debt.name);
     throw err;
   }
   return getDebt(db, auth.userId, id, auth.today);
 }
 
-export async function deleteDebt(db: DbClient, userId: string, id: string): Promise<void> {
-  await findDebt(db, userId, id);
-  if ((await db.transaction.count({ where: { userId, debtId: id } })) > 0) {
+export async function deleteDebt(
+  db: DbClient,
+  auth: AuthContext,
+  id: string,
+): Promise<DeleteResultDTO> {
+  const { userId } = auth;
+  const debt = await findDebt(db, userId, id);
+  if (!debt.isActive) return { deleted: 'soft' };
+  const balance = await loanBalance(db, userId, debt);
+  if (balance !== 0) {
     throw conflict(
-      'DEBT_IN_USE',
-      'Este préstamo tiene movimientos. Archívalo en lugar de eliminarlo.',
+      'DEBT_HAS_BALANCE',
+      `El préstamo tiene un saldo de ${formatCOP(balance)}. Págalo, corrige el saldo inicial o elimina sus movimientos antes de eliminarlo.`,
     );
   }
-  await db.debt.delete({ where: { id_userId: { id, userId } } });
+  if ((await db.transaction.count({ where: { userId, debtId: id } })) === 0) {
+    await db.debt.delete({ where: { id_userId: { id, userId } } });
+    return { deleted: 'hard' };
+  }
+  await db.debt.update({ where: { id_userId: { id, userId } }, data: { isActive: false } });
+  return { deleted: 'soft' };
+}
+
+export async function restoreDebt(db: DbClient, auth: AuthContext, id: string) {
+  await findDebt(db, auth.userId, id);
+  await db.debt.update({
+    where: { id_userId: { id, userId: auth.userId } },
+    data: { isActive: true },
+  });
+  return getDebt(db, auth.userId, id, auth.today);
 }

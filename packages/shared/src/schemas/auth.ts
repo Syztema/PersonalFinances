@@ -23,6 +23,13 @@ export const changePasswordSchema = z.strictObject({
 export const updateMeSchema = z.strictObject({
   name: zName(80).optional(),
   theme: z.enum(THEMES).optional(),
+  email: zEmail.optional(),
+  /** Obligatoria para cambiar el email. */
+  currentPassword: z.string().min(1).max(128).optional(),
+});
+export const deleteMeSchema = z.strictObject({
+  password: z.string().min(1, 'Requerida').max(128),
+  confirmation: z.literal('ELIMINAR', 'Escribe ELIMINAR para confirmar'),
 });
 
 export type RegisterInput = z.output<typeof registerSchema>;
@@ -30,3 +37,4 @@ export type LoginInput = z.output<typeof loginSchema>;
 export type ResetPasswordInput = z.output<typeof resetPasswordSchema>;
 export type ChangePasswordInput = z.output<typeof changePasswordSchema>;
 export type UpdateMeInput = z.output<typeof updateMeSchema>;
+export type DeleteMeInput = z.output<typeof deleteMeSchema>;

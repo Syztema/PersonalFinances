@@ -4,12 +4,14 @@ import {
   formatCOP,
   type AccountDTO,
   type AccountType,
+  type DeleteResultDTO,
 } from '@finanzas/shared';
 import { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { ConfirmButton } from '../../components/ui/ConfirmButton';
 import { Field, Select, TextInput } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { NegativeToggle } from '../../components/ui/NegativeToggle';
 import { ColorPicker, IconPicker } from '../../components/ui/Pickers';
 import { Sheet } from '../../components/ui/Sheet';
 import { api, type ApiError } from '../../lib/api';
@@ -30,10 +32,12 @@ export function AccountFormSheet({
   open,
   onOpenChange,
   account,
+  onAdjust,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   account?: AccountDTO;
+  onAdjust?: (account: AccountDTO) => void;
 }) {
   return (
     <Sheet
@@ -41,19 +45,30 @@ export function AccountFormSheet({
       onOpenChange={onOpenChange}
       title={account ? 'Editar cuenta' : 'Nueva cuenta'}
     >
-      {open && <AccountForm account={account} onDone={() => onOpenChange(false)} />}
+      {open && (
+        <AccountForm account={account} onDone={() => onOpenChange(false)} onAdjust={onAdjust} />
+      )}
     </Sheet>
   );
 }
 
-function AccountForm({ account, onDone }: { account?: AccountDTO; onDone: () => void }) {
+function AccountForm({
+  account,
+  onDone,
+  onAdjust,
+}: {
+  account?: AccountDTO;
+  onDone: () => void;
+  onAdjust?: (account: AccountDTO) => void;
+}) {
   const today = useToday();
   const [name, setName] = useState(account?.name ?? '');
   const [type, setType] = useState<AccountType>(account?.type ?? 'BANK');
   const [institution, setInstitution] = useState(account?.institution ?? '');
   const [initialBalance, setInitialBalance] = useState<number | null>(
-    account?.initialBalance ?? null,
+    account ? Math.abs(account.initialBalance) : null,
   );
+  const [negative, setNegative] = useState((account?.initialBalance ?? 0) < 0);
   const [openingDate, setOpeningDate] = useState(account?.openingDate ?? today);
   const [icon, setIcon] = useState(account?.icon ?? DEFAULT_ICON.BANK);
   const [iconTouched, setIconTouched] = useState(!!account);
@@ -66,11 +81,11 @@ function AccountForm({ account, onDone }: { account?: AccountDTO; onDone: () => 
       account ? api.put(`/accounts/${account.id}`, body) : api.post('/accounts', body),
     account ? 'Cuenta actualizada' : 'Cuenta creada',
   );
-  const archive = useCrudMutation(
-    () => api.put(`/accounts/${account!.id}`, { isActive: !account!.isActive }),
-    account?.isActive ? 'Cuenta archivada' : 'Cuenta reactivada',
+  const remove = useCrudMutation(
+    () => api.del<DeleteResultDTO>(`/accounts/${account!.id}`),
+    (r) =>
+      r.deleted === 'soft' ? 'Cuenta eliminada: se conserva su historial' : 'Cuenta eliminada',
   );
-  const remove = useCrudMutation(() => api.del(`/accounts/${account!.id}`), 'Cuenta eliminada');
   const onError = (err: ApiError) => {
     const mapped = toFormErrors(err, ['name', 'initialBalance']);
     setFields(mapped);
@@ -84,7 +99,7 @@ function AccountForm({ account, onDone }: { account?: AccountDTO; onDone: () => 
         name,
         type,
         institution: institution || null,
-        initialBalance: initialBalance ?? 0,
+        initialBalance: (negative ? -1 : 1) * (initialBalance ?? 0),
         openingDate,
         icon,
         color,
@@ -149,12 +164,13 @@ function AccountForm({ account, onDone }: { account?: AccountDTO; onDone: () => 
         error={fields.initialBalance}
         hint={
           account
-            ? `Tu saldo de hoy es ${formatCOP(account.balance)}. Cambia este valor solo si el saldo inicial quedó mal registrado.`
+            ? `Tu saldo de hoy es ${formatCOP(account.balance)}. Para corregir el saldo de hoy usa "Ajustar saldo"; cambia este valor solo si el saldo inicial quedó mal registrado.`
             : 'El saldo que tiene hoy. Los movimientos que registres lo irán ajustando.'
         }
       >
         <MoneyInput id="acc-balance" value={initialBalance} onChange={setInitialBalance} />
       </Field>
+      <NegativeToggle checked={negative} onChange={setNegative} />
       <Field
         label="Fecha de apertura en la app"
         htmlFor="acc-date"
@@ -191,20 +207,22 @@ function AccountForm({ account, onDone }: { account?: AccountDTO; onDone: () => 
         Guardar cuenta
       </Button>
       {account && (
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="secondary"
-            loading={archive.isPending}
-            onClick={() => archive.mutate(undefined, { onSuccess: onDone, onError })}
-          >
-            {account.isActive ? 'Archivar' : 'Reactivar'}
-          </Button>
-          <ConfirmButton
-            loading={remove.isPending}
-            onConfirm={() => remove.mutate(undefined, { onSuccess: onDone, onError })}
-          >
-            Eliminar
-          </ConfirmButton>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" onClick={() => onAdjust?.(account)}>
+              Ajustar saldo
+            </Button>
+            <ConfirmButton
+              loading={remove.isPending}
+              onConfirm={() => remove.mutate(undefined, { onSuccess: onDone, onError })}
+            >
+              Eliminar cuenta
+            </ConfirmButton>
+          </div>
+          <p className="text-xs text-muted">
+            Para eliminarla debe tener saldo $0. Si tiene movimientos, se oculta y su historial se
+            conserva.
+          </p>
         </div>
       )}
     </form>

@@ -1,7 +1,7 @@
 import { debtCreateSchema, debtUpdateSchema } from '@finanzas/shared';
 import type { FastifyInstance } from 'fastify';
 import { parse, parseId } from '../../lib/validation';
-import { createDebt, deleteDebt, getDebt, listDebts, updateDebt } from './service';
+import { createDebt, deleteDebt, getDebt, listDebts, restoreDebt, updateDebt } from './service';
 
 export async function debtRoutes(app: FastifyInstance) {
   app.get('/debts', async (req) => ({
@@ -26,8 +26,9 @@ export async function debtRoutes(app: FastifyInstance) {
     ),
   }));
 
-  app.delete('/debts/:id', async (req, reply) => {
-    await deleteDebt(app.prisma, req.auth.userId, parseId(req.params));
-    return reply.status(204).send();
-  });
+  app.delete('/debts/:id', async (req) => deleteDebt(app.prisma, req.auth, parseId(req.params)));
+
+  app.post('/debts/:id/restore', async (req) => ({
+    debt: await restoreDebt(app.prisma, req.auth, parseId(req.params)),
+  }));
 }

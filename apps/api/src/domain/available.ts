@@ -9,7 +9,7 @@ export interface AvailableInput {
 }
 
 /** Resta sin producir `-0` (que rompe comparaciones y se vería como "-$0"). */
-const minus = (v: number) => (v === 0 ? 0 : -v);
+export const minus = (v: number) => (v === 0 ? 0 : -v);
 
 /** Spec 8.6. */
 export function estimateAvailable(i: AvailableInput): {

@@ -3,10 +3,13 @@ import type {
   CategoryDTO,
   CategoryKind,
   CategoryUpdateInput,
+  DeleteResultDTO,
 } from '@finanzas/shared';
-import type { Category } from '../../generated/prisma/client';
-import { badRequest, conflict, isUniqueViolation, notFound } from '../../lib/errors';
+import type { Category, PrismaClient } from '../../generated/prisma/client';
+import { badRequest, conflict, entityDeleted, isUniqueViolation, notFound } from '../../lib/errors';
 import type { DbClient } from '../../lib/prisma';
+import type { AuthContext } from '../../types/fastify';
+import { cascadeSoftDelete } from '../planning/cascade';
 
 const NAME_TAKEN = () => conflict('CATEGORY_NAME_TAKEN', 'Ya tienes una categoría con ese nombre.');
 
@@ -32,6 +35,7 @@ async function findCategory(db: DbClient, userId: string, id: string): Promise<C
   return category;
 }
 
+/** Addendum §3.4: si la app necesita una categoría del sistema eliminada, la restaura. */
 export async function findSystemCategory(
   db: DbClient,
   userId: string,
@@ -41,7 +45,11 @@ export async function findSystemCategory(
     where: { userId_systemKey: { userId, systemKey } },
   });
   if (!category) throw new Error(`Missing system category ${systemKey} for user`);
-  return category;
+  if (category.isActive) return category;
+  return db.category.update({
+    where: { id_userId: { id: category.id, userId } },
+    data: { isActive: true },
+  });
 }
 
 async function validParent(
@@ -59,6 +67,10 @@ async function validParent(
   if (parent.id === selfId)
     throw badRequest('INVALID_PARENT', 'Una categoría no puede ser su propia subcategoría.', {
       parentId: 'Inválida',
+    });
+  if (!parent.isActive)
+    throw badRequest('INVALID_PARENT', 'La categoría principal fue eliminada.', {
+      parentId: 'Categoría eliminada',
     });
   if (parent.parentId)
     throw badRequest('INVALID_PARENT', 'Solo se permite un nivel de subcategorías.', {
@@ -94,9 +106,43 @@ async function assertRootNameFree(
       name: { equals: name, mode: 'insensitive' },
       ...(exceptId && { id: { not: exceptId } }),
     },
-    select: { id: true },
+    select: { isActive: true },
   });
-  if (existing) throw NAME_TAKEN();
+  if (!existing) return;
+  if (!existing.isActive) {
+    throw conflict(
+      'CATEGORY_NAME_TAKEN',
+      'Ya tienes una categoría eliminada con ese nombre. Restáurala desde Eliminados.',
+    );
+  }
+  throw NAME_TAKEN();
+}
+
+/** Choque de nombre en una subcategoría: distingue si el hermano en conflicto está eliminado. */
+async function siblingNameTaken(
+  db: DbClient,
+  userId: string,
+  kind: CategoryKind,
+  parentId: string | null,
+  name: string,
+  exceptId?: string,
+) {
+  const other = await db.category.findFirst({
+    where: {
+      userId,
+      kind,
+      parentId,
+      name: { equals: name, mode: 'insensitive' },
+      ...(exceptId && { id: { not: exceptId } }),
+    },
+    select: { isActive: true },
+  });
+  return other && !other.isActive
+    ? conflict(
+        'CATEGORY_NAME_TAKEN',
+        'Ya tienes una categoría eliminada con ese nombre. Restáurala desde Eliminados.',
+      )
+    : NAME_TAKEN();
 }
 
 export async function listCategories(db: DbClient, userId: string): Promise<CategoryDTO[]> {
@@ -135,7 +181,9 @@ export async function createCategory(
     });
     return toCategoryDTO(created);
   } catch (err) {
-    if (isUniqueViolation(err)) throw NAME_TAKEN();
+    if (isUniqueViolation(err)) {
+      throw await siblingNameTaken(db, userId, input.kind, input.parentId ?? null, input.name);
+    }
     throw err;
   }
 }
@@ -147,11 +195,15 @@ export async function updateCategory(
   input: CategoryUpdateInput,
 ): Promise<CategoryDTO> {
   const current = await findCategory(db, userId, id);
-  if (current.isSystem)
-    throw conflict('SYSTEM_CATEGORY', 'Esta categoría es del sistema y no se puede modificar.');
+  if (!current.isActive) throw entityDeleted(current.name, 'editarla');
   if (input.bucket && current.kind === 'INCOME') {
     throw badRequest('INVALID_BUCKET', 'Las categorías de ingreso no tienen bolsa.', {
       bucket: 'No aplica',
+    });
+  }
+  if (input.parentId && current.systemKey) {
+    throw badRequest('INVALID_PARENT', 'Las categorías del sistema no pueden ser subcategorías.', {
+      parentId: 'No permitida',
     });
   }
   if (input.parentId) {
@@ -177,34 +229,78 @@ export async function updateCategory(
         bucket: input.bucket,
         icon: input.icon,
         color: input.color,
-        isActive: input.isActive,
         sortOrder: input.sortOrder,
       },
     });
     return toCategoryDTO(updated);
   } catch (err) {
-    if (isUniqueViolation(err)) throw NAME_TAKEN();
+    if (isUniqueViolation(err)) {
+      throw await siblingNameTaken(
+        db,
+        userId,
+        current.kind,
+        finalParent ?? null,
+        input.name ?? current.name,
+        id,
+      );
+    }
     throw err;
   }
 }
 
-export async function deleteCategory(db: DbClient, userId: string, id: string): Promise<void> {
+/**
+ * Addendum §3: una categoría principal se elimina con sus subcategorías. Sin referencias se borran;
+ * con historial (o si es del sistema) se eliminan lógicamente y se aplican los efectos en cadena.
+ */
+export async function deleteCategory(
+  db: PrismaClient,
+  auth: AuthContext,
+  id: string,
+): Promise<DeleteResultDTO> {
+  const { userId } = auth;
   const category = await findCategory(db, userId, id);
-  if (category.isSystem || category.systemKey) {
-    throw conflict('SYSTEM_CATEGORY', 'Esta categoría no se puede eliminar.');
-  }
+  if (!category.isActive) return { deleted: 'soft' };
+  const children = await db.category.findMany({
+    where: { userId, parentId: id },
+    select: { id: true, systemKey: true },
+  });
+  const ids = [id, ...children.map((c) => c.id)];
   const counts = await Promise.all([
-    db.transaction.count({ where: { userId, categoryId: id } }),
-    db.category.count({ where: { userId, parentId: id } }),
-    db.budgetCategory.count({ where: { userId, categoryId: id } }),
-    db.recurringRule.count({ where: { userId, categoryId: id } }),
-    db.scheduledItem.count({ where: { userId, categoryId: id } }),
+    db.transaction.count({ where: { userId, categoryId: { in: ids } } }),
+    db.budgetCategory.count({ where: { userId, categoryId: { in: ids } } }),
+    db.recurringRule.count({ where: { userId, categoryId: { in: ids } } }),
+    db.scheduledItem.count({ where: { userId, categoryId: { in: ids } } }),
   ]);
-  if (counts.some((c) => c > 0)) {
-    throw conflict(
-      'CATEGORY_IN_USE',
-      'Esta categoría tiene movimientos o subcategorías. Archívala en lugar de eliminarla.',
-    );
+  if (!category.systemKey && children.every((c) => !c.systemKey) && counts.every((c) => c === 0)) {
+    await db.$transaction([
+      db.category.deleteMany({ where: { userId, parentId: id } }),
+      db.category.delete({ where: { id_userId: { id, userId } } }),
+    ]);
+    return { deleted: 'hard' };
   }
-  await db.category.delete({ where: { id_userId: { id, userId } } });
+  await db.$transaction(async (tx) => {
+    await tx.category.updateMany({ where: { userId, id: { in: ids } }, data: { isActive: false } });
+    await cascadeSoftDelete(tx, userId, { categoryIds: ids }, auth.today);
+  });
+  return { deleted: 'soft' };
+}
+
+/** Restaurar una principal restaura sus subcategorías; una subcategoría exige su principal activa. */
+export async function restoreCategory(
+  db: DbClient,
+  userId: string,
+  id: string,
+): Promise<CategoryDTO> {
+  const category = await findCategory(db, userId, id);
+  if (category.parentId) {
+    const parent = await findCategory(db, userId, category.parentId);
+    if (!parent.isActive) {
+      throw conflict('PARENT_DELETED', `Restaura primero "${parent.name}".`);
+    }
+  }
+  await db.category.updateMany({
+    where: { userId, OR: [{ id }, { parentId: id }] },
+    data: { isActive: true },
+  });
+  return toCategoryDTO(await findCategory(db, userId, id));
 }

@@ -1,12 +1,16 @@
 import { Outlet } from 'react-router';
+import { useMe } from '../features/auth/useAuth';
 import { useSessionExpiry } from '../features/auth/useSessionExpiry';
 import { QuickAddProvider } from '../features/quick-add/QuickAddContext';
 import { QuickAddSheets } from '../features/quick-add/QuickAddSheets';
+import { useThemeSync } from '../lib/theme';
 import { BottomNav } from './BottomNav';
 import { Sidebar } from './Sidebar';
 
 export function AppLayout() {
   useSessionExpiry();
+  const me = useMe();
+  useThemeSync(me.data?.theme);
   return (
     <QuickAddProvider>
       <div className="min-h-dvh lg:flex">

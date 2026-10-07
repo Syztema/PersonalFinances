@@ -11,6 +11,7 @@ import { PageSpinner } from '../../components/ui/Spinner';
 import { api } from '../../lib/api';
 import { formatShortDate } from '../../lib/format';
 import { qk } from '../../lib/queries';
+import { useRestore } from '../../lib/useRestore';
 import { useQuickAdd } from '../quick-add/QuickAddContext';
 import { TransactionDetailSheet } from '../transactions/TransactionDetailSheet';
 import { TransactionRow } from '../transactions/TransactionRow';
@@ -22,6 +23,10 @@ export function CardDetailPage() {
   const { open } = useQuickAdd();
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<TransactionDTO | null>(null);
+  const { restore, isRestoring } = useRestore(
+    (cardId) => `/credit-cards/${cardId}/restore`,
+    'Tarjeta restaurada',
+  );
   const statement = useQuery({
     queryKey: [...qk.cards, id, 'statement'],
     queryFn: () => api.get<CardStatementDTO>(`/credit-cards/${id}/statement`),
@@ -43,10 +48,22 @@ export function CardDetailPage() {
       </Link>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{card.name}</h1>
-        <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
-          Editar
-        </Button>
+        {card.isActive && (
+          <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+            Editar
+          </Button>
+        )}
       </div>
+      {!card.isActive && (
+        <Card className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted">
+            Esta tarjeta fue eliminada. Su historial se conserva.
+          </p>
+          <Button size="sm" loading={isRestoring(card.id)} onClick={() => restore(card.id)}>
+            Restaurar
+          </Button>
+        </Card>
+      )}
       <Card>
         <dl className="grid grid-cols-3 gap-2 text-sm">
           <div>
@@ -56,9 +73,9 @@ export function CardDetailPage() {
             </dd>
           </div>
           <div>
-            <dt className="text-muted">Deuda</dt>
+            <dt className="text-muted">{card.debt < 0 ? 'Saldo a favor' : 'Deuda'}</dt>
             <dd className="font-semibold">
-              <Amount value={Math.max(card.debt, 0)} tone={card.debt > 0 ? 'debt' : 'neutral'} />
+              <Amount value={Math.abs(card.debt)} tone={card.debt > 0 ? 'debt' : 'neutral'} />
             </dd>
           </div>
           <div>
@@ -84,7 +101,7 @@ export function CardDetailPage() {
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2">
           <Button
-            disabled={card.debt <= 0}
+            disabled={!card.isActive || card.debt <= 0}
             onClick={() => open({ kind: 'card-payment', cardId: card.id })}
           >
             Pagar tarjeta

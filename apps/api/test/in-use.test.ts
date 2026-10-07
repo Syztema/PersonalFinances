@@ -20,7 +20,7 @@ async function newUser() {
 }
 
 describe('in-use guards', () => {
-  it('refuses to delete an account that has a movement', async () => {
+  it('an account with money cannot be deleted', async () => {
     const { api, f } = await newUser();
     await api.post('/api/transactions', {
       type: 'EXPENSE',
@@ -31,12 +31,12 @@ describe('in-use guards', () => {
     });
     const res = await api.del(`/api/accounts/${f.bank}`);
     expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('ACCOUNT_IN_USE');
+    expect(res.body.error.code).toBe('ACCOUNT_HAS_BALANCE');
   });
 
-  it('refuses to delete a category used by a movement', async () => {
+  it('a category used by a movement is deleted logically and stays in the history', async () => {
     const { api, f } = await newUser();
-    await api.post('/api/transactions', {
+    const tx = await api.post('/api/transactions', {
       type: 'EXPENSE',
       amount: 1000,
       date: TODAY,
@@ -44,11 +44,12 @@ describe('in-use guards', () => {
       categoryId: f.cat.fun,
     });
     const res = await api.del(`/api/categories/${f.cat.fun}`);
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('CATEGORY_IN_USE');
+    expect(res.body).toEqual({ deleted: 'soft' });
+    const read = await api.get(`/api/transactions/${tx.body.transaction.id}`);
+    expect(read.body.transaction.category).toMatchObject({ id: f.cat.fun, isActive: false });
   });
 
-  it('protects credit cards with purchases or debt', async () => {
+  it('protects credit cards with debt', async () => {
     const { api, f } = await newUser();
     await api.post(`/api/credit-cards/${f.card}/purchase`, {
       amount: 100_000,
@@ -57,13 +58,10 @@ describe('in-use guards', () => {
     });
     const del = await api.del(`/api/credit-cards/${f.card}`);
     expect(del.status).toBe(409);
-    expect(del.body.error.code).toBe('CARD_IN_USE');
-    const archive = await api.put(`/api/credit-cards/${f.card}`, { isActive: false });
-    expect(archive.status).toBe(409);
-    expect(archive.body.error.code).toBe('CARD_HAS_DEBT');
+    expect(del.body.error.code).toBe('CARD_HAS_DEBT');
   });
 
-  it('protects loans with payments or balance', async () => {
+  it('protects loans with balance', async () => {
     const { api, f } = await newUser();
     await api.post(`/api/debts/${f.debt}/payments`, {
       accountId: f.bank,
@@ -72,10 +70,7 @@ describe('in-use guards', () => {
     });
     const del = await api.del(`/api/debts/${f.debt}`);
     expect(del.status).toBe(409);
-    expect(del.body.error.code).toBe('DEBT_IN_USE');
-    const archive = await api.put(`/api/debts/${f.debt}`, { isActive: false });
-    expect(archive.status).toBe(409);
-    expect(archive.body.error.code).toBe('DEBT_HAS_BALANCE');
+    expect(del.body.error.code).toBe('DEBT_HAS_BALANCE');
   });
 
   it('account balance = initial + income - expense - out + in', async () => {

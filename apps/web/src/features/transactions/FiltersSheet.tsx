@@ -16,6 +16,7 @@ import { Sheet } from '../../components/ui/Sheet';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { qk, useAccounts, useCards, useCategories } from '../../lib/queries';
+import { refName } from '../../lib/refs';
 import { EMPTY_FILTERS, type TxFilters } from './filters';
 
 interface Props {
@@ -57,6 +58,8 @@ function FiltersForm({ value, onApply }: { value: TxFilters; onApply: (f: TxFilt
       'types',
       draft.types.includes(t) ? draft.types.filter((x) => x !== t) : [...draft.types, t],
     );
+  const invalidRange =
+    draft.period === 'custom' && !!draft.from && !!draft.to && draft.from > draft.to;
 
   return (
     <div className="space-y-5">
@@ -74,20 +77,27 @@ function FiltersForm({ value, onApply }: { value: TxFilters; onApply: (f: TxFilt
           ]}
         />
         {draft.period === 'custom' && (
-          <div className="grid grid-cols-2 gap-2">
-            <TextInput
-              type="date"
-              aria-label="Desde"
-              value={draft.from}
-              onChange={(e) => set('from', e.target.value)}
-            />
-            <TextInput
-              type="date"
-              aria-label="Hasta"
-              value={draft.to}
-              onChange={(e) => set('to', e.target.value)}
-            />
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <TextInput
+                type="date"
+                aria-label="Desde"
+                value={draft.from}
+                onChange={(e) => set('from', e.target.value)}
+              />
+              <TextInput
+                type="date"
+                aria-label="Hasta"
+                value={draft.to}
+                onChange={(e) => set('to', e.target.value)}
+              />
+            </div>
+            {invalidRange && (
+              <p role="alert" className="text-sm text-negative">
+                La fecha final debe ser igual o posterior a la inicial.
+              </p>
+            )}
+          </>
         )}
       </div>
 
@@ -122,7 +132,7 @@ function FiltersForm({ value, onApply }: { value: TxFilters; onApply: (f: TxFilt
           <option value="">Todas</option>
           {(accounts.data ?? []).map((a) => (
             <option key={a.id} value={a.id}>
-              {a.name}
+              {refName(a)}
             </option>
           ))}
         </Select>
@@ -136,7 +146,7 @@ function FiltersForm({ value, onApply }: { value: TxFilters; onApply: (f: TxFilt
           <option value="">Todas</option>
           {(cards.data ?? []).map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {refName(c)}
             </option>
           ))}
         </Select>
@@ -153,7 +163,7 @@ function FiltersForm({ value, onApply }: { value: TxFilters; onApply: (f: TxFilt
             .map((c) => (
               <option key={c.id} value={c.id}>
                 {c.kind === 'INCOME' ? 'Ingreso · ' : ''}
-                {c.name}
+                {refName(c)}
               </option>
             ))}
         </Select>
@@ -195,7 +205,9 @@ function FiltersForm({ value, onApply }: { value: TxFilters; onApply: (f: TxFilt
         <Button variant="secondary" onClick={() => onApply(EMPTY_FILTERS)}>
           Limpiar
         </Button>
-        <Button onClick={() => onApply(draft)}>Aplicar</Button>
+        <Button disabled={invalidRange} onClick={() => onApply(draft)}>
+          Aplicar
+        </Button>
       </div>
     </div>
   );

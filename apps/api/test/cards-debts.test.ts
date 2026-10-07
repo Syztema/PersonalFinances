@@ -52,15 +52,17 @@ describe('credit cards', () => {
     expect((await api.post('/api/credit-cards', card)).status).toBe(409);
   });
 
-  it('archives only without debt and deletes only without movements', async () => {
+  it('deletes only without debt; an unused card is deleted for good', async () => {
     const { api } = await registerUser(app);
     const { body } = await api.post('/api/credit-cards', { ...card, initialDebt: 100_000 });
     const id = body.card.id;
-    expect((await api.put(`/api/credit-cards/${id}`, { isActive: false })).status).toBe(409);
-    const archived = await api.put(`/api/credit-cards/${id}`, { initialDebt: 0, isActive: false });
-    expect(archived.status).toBe(200);
-    expect(archived.body.card.isActive).toBe(false);
-    expect((await api.del(`/api/credit-cards/${id}`)).status).toBe(204);
+    const blocked = await api.del(`/api/credit-cards/${id}`);
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error.code).toBe('CARD_HAS_DEBT');
+    await api.put(`/api/credit-cards/${id}`, { initialDebt: 0 });
+    const res = await api.del(`/api/credit-cards/${id}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ deleted: 'hard' });
   });
 });
 

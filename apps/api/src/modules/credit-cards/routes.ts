@@ -7,6 +7,7 @@ import {
   getCardStatement,
   getCreditCard,
   listCreditCards,
+  restoreCreditCard,
   updateCreditCard,
 } from './service';
 
@@ -41,8 +42,11 @@ export async function creditCardRoutes(app: FastifyInstance) {
     ),
   }));
 
-  app.delete('/credit-cards/:id', async (req, reply) => {
-    await deleteCreditCard(app.prisma, req.auth.userId, parseId(req.params));
-    return reply.status(204).send();
-  });
+  app.delete('/credit-cards/:id', async (req) =>
+    deleteCreditCard(app.prisma, req.auth, parseId(req.params)),
+  );
+
+  app.post('/credit-cards/:id/restore', async (req) => ({
+    card: await restoreCreditCard(app.prisma, req.auth, parseId(req.params)),
+  }));
 }

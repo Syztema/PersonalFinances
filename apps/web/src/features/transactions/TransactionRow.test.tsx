@@ -3,7 +3,13 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { TransactionRow } from './TransactionRow';
 
-const ref = (id: string, name: string) => ({ id, name, icon: 'wallet', color: '#123456' });
+const ref = (id: string, name: string) => ({
+  id,
+  name,
+  icon: 'wallet',
+  color: '#123456',
+  isActive: true,
+});
 const base: TransactionDTO = {
   id: 't1',
   type: 'EXPENSE',
@@ -110,5 +116,59 @@ describe('TransactionRow', () => {
     );
     expect(screen.getByText('Nu Crédito · 3 cuotas')).toBeInTheDocument();
     expect(screen.getByText('-$150.000')).toBeInTheDocument();
+  });
+
+  it('marks a deleted account in the subtitle', () => {
+    render(
+      <TransactionRow
+        transaction={{
+          ...base,
+          type: 'EXPENSE',
+          account: { ...ref('a1', 'Nequi'), isActive: false, type: 'DIGITAL_WALLET' },
+          category: { ...ref('k1', 'Mercado'), kind: 'EXPENSE', parentId: null },
+          description: 'Compra',
+        }}
+        onSelect={() => undefined}
+      />,
+    );
+    expect(screen.getByText(/Nequi \(eliminada\)/)).toBeInTheDocument();
+  });
+});
+
+describe('TransactionRow icon contrast (final review I2)', () => {
+  const iconBadge = () => document.querySelector('span.rounded-full') as HTMLElement;
+
+  it('uses a token foreground on token backgrounds (transfers, uncategorised movements)', () => {
+    const { rerender } = render(
+      <TransactionRow
+        onSelect={() => undefined}
+        transaction={{ ...base, type: 'TRANSFER', amount: 1000 }}
+      />,
+    );
+    expect(iconBadge()).toHaveClass('text-surface');
+    expect(iconBadge()).not.toHaveClass('text-white');
+    rerender(<TransactionRow onSelect={() => undefined} transaction={base} />);
+    expect(iconBadge()).toHaveClass('text-surface');
+    rerender(
+      <TransactionRow
+        onSelect={() => undefined}
+        transaction={{ ...base, type: 'INCOME', description: 'Salario' }}
+      />,
+    );
+    expect(iconBadge()).toHaveClass('text-surface');
+  });
+
+  it('keeps white on user-chosen category colors', () => {
+    render(
+      <TransactionRow
+        onSelect={() => undefined}
+        transaction={{
+          ...base,
+          category: { ...ref('k1', 'Mercado'), kind: 'EXPENSE', parentId: null },
+        }}
+      />,
+    );
+    expect(iconBadge()).toHaveClass('text-white');
+    expect(iconBadge()).not.toHaveClass('text-surface');
   });
 });

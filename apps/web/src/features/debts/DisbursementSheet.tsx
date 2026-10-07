@@ -1,14 +1,16 @@
-import type { DebtDTO } from '@finanzas/shared';
+import type { DebtDTO, TransactionDTO } from '@finanzas/shared';
 import { useState } from 'react';
 import { Button } from '../../components/ui/Button';
-import { Field, Select } from '../../components/ui/Field';
+import { Field, Select, TextInput } from '../../components/ui/Field';
+import { FrozenNote } from '../../components/ui/FrozenNote';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Sheet } from '../../components/ui/Sheet';
-import { api } from '../../lib/api';
+import { formatDate } from '../../lib/format';
 import { useAccounts } from '../../lib/queries';
-import { useCrudMutation } from '../../lib/useCrud';
+import { frozenHolder, refName } from '../../lib/refs';
 import { useToday } from '../auth/useAuth';
 import { DateChips } from '../quick-add/DateChips';
+import { useSaveTransaction } from '../quick-add/useSaveTransaction';
 
 export function DisbursementSheet({
   debt,
@@ -24,22 +26,31 @@ export function DisbursementSheet({
       title="Registrar desembolso"
       description="Dinero adicional del préstamo que entra a tu cuenta. No es un ingreso."
     >
-      {debt && <DisbursementForm debt={debt} onDone={onClose} />}
+      {debt && <DisbursementForm debtId={debt.id} onDone={onClose} />}
     </Sheet>
   );
 }
 
-function DisbursementForm({ debt, onDone }: { debt: DebtDTO; onDone: () => void }) {
+/** Crear (desde Préstamos) o editar (desde el historial) un desembolso. */
+export function DisbursementForm({
+  debtId,
+  edit,
+  onDone,
+}: {
+  debtId: string;
+  edit?: TransactionDTO;
+  onDone: () => void;
+}) {
   const today = useToday();
   const accounts = useAccounts();
-  const [amount, setAmount] = useState<number | null>(null);
-  const [accountId, setAccountId] = useState('');
-  const [date, setDate] = useState(today);
+  const [amount, setAmount] = useState<number | null>(edit?.amount ?? null);
+  const [accountId, setAccountId] = useState(edit?.account?.id ?? '');
+  const [date, setDate] = useState(edit?.date ?? today);
+  const [description, setDescription] = useState(edit?.description ?? '');
   const [error, setError] = useState<string | null>(null);
-  const save = useCrudMutation(
-    (body: Record<string, unknown>) => api.post(`/debts/${debt.id}/disbursements`, body),
-    'Desembolso registrado',
-  );
+  const save = useSaveTransaction(edit ? 'Desembolso actualizado' : 'Desembolso registrado');
+  const frozen = frozenHolder(edit);
+  const options = (accounts.data ?? []).filter((a) => a.isActive || a.id === edit?.account?.id);
 
   return (
     <form
@@ -47,28 +58,58 @@ function DisbursementForm({ debt, onDone }: { debt: DebtDTO; onDone: () => void 
       onSubmit={(e) => {
         e.preventDefault();
         if (!amount || !accountId) return setError('Escribe el valor y elige la cuenta');
-        save.mutate(
-          { amount, accountId, date },
+        const body = { amount, accountId, date, description: description || null };
+        save.submit(
+          edit
+            ? {
+                path: `/transactions/${edit.id}`,
+                method: 'PUT',
+                body: {
+                  type: 'DEBT_DISBURSEMENT',
+                  ...body,
+                  debtId,
+                  payee: edit.payee,
+                  notes: edit.notes,
+                  tags: edit.tags,
+                },
+              }
+            : { path: `/debts/${debtId}/disbursements`, method: 'POST', body },
           { onSuccess: onDone, onError: (err) => setError(err.message) },
         );
       }}
     >
+      {frozen && <FrozenNote holder={frozen} editable={['la descripción']} />}
       <Field label="Valor" htmlFor="disb-amount">
-        <MoneyInput id="disb-amount" value={amount} onChange={setAmount} />
+        <MoneyInput id="disb-amount" value={amount} onChange={setAmount} disabled={!!frozen} />
       </Field>
       <Field label="Recibido en" htmlFor="disb-account">
-        <Select id="disb-account" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+        <Select
+          id="disb-account"
+          value={accountId}
+          disabled={!!frozen}
+          onChange={(e) => setAccountId(e.target.value)}
+        >
           <option value="">Elige una cuenta</option>
-          {(accounts.data ?? [])
-            .filter((a) => a.isActive)
-            .map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
+          {options.map((a) => (
+            <option key={a.id} value={a.id}>
+              {refName(a)}
+            </option>
+          ))}
         </Select>
       </Field>
-      <DateChips value={date} onChange={setDate} today={today} />
+      {frozen ? (
+        <p className="text-sm">{formatDate(date)}</p>
+      ) : (
+        <DateChips value={date} onChange={setDate} today={today} />
+      )}
+      <Field label="Descripción (opcional)" htmlFor="disb-description">
+        <TextInput
+          id="disb-description"
+          maxLength={140}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </Field>
       {error && (
         <p role="alert" className="text-sm text-negative">
           {error}

@@ -136,3 +136,17 @@ export function deriveMethod(
       return 'OTHER';
   }
 }
+
+export const FREQUENCY_LABELS: Record<Frequency, string> = {
+  WEEKLY: 'Semanal',
+  SEMIMONTHLY: 'Quincenal',
+  MONTHLY: 'Mensual',
+  YEARLY: 'Anual',
+  CUSTOM_DAYS: 'Cada N días',
+};
+
+export const THEME_LABELS: Record<Theme, string> = {
+  DARK: 'Oscuro',
+  LIGHT: 'Claro',
+  SYSTEM: 'Según el sistema',
+};

@@ -43,7 +43,7 @@ export function client(app: FastifyInstance, cookie?: string) {
     post: <T = any>(url: string, body: unknown = {}) => call<T>('POST', url, body),
     put: <T = any>(url: string, body: unknown = {}) => call<T>('PUT', url, body),
     patch: <T = any>(url: string, body: unknown = {}) => call<T>('PATCH', url, body),
-    del: <T = any>(url: string) => call<T>('DELETE', url),
+    del: <T = any>(url: string, body?: unknown) => call<T>('DELETE', url, body),
   };
 }
 

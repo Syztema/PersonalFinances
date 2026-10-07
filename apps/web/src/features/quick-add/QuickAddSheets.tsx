@@ -1,6 +1,7 @@
 import type { TransactionDTO } from '@finanzas/shared';
 import { Sheet } from '../../components/ui/Sheet';
 import { useDebts } from '../../lib/queries';
+import { DisbursementForm } from '../debts/DisbursementSheet';
 import { useQuickAdd, type QuickAddKind } from './QuickAddContext';
 import { QuickAddMenu } from './QuickAddMenu';
 import { PayCardForm } from './PayCardForm';
@@ -16,9 +17,10 @@ const TITLES: Record<QuickAddKind, string> = {
   'card-purchase': 'Compra con tarjeta',
   'card-payment': 'Pagar tarjeta',
   'loan-payment': 'Pagar préstamo',
+  disbursement: 'Desembolso de préstamo',
 };
 
-export function kindForTransaction(t: TransactionDTO): QuickAddKind | null {
+export function kindForTransaction(t: TransactionDTO): QuickAddKind {
   switch (t.type) {
     case 'INCOME':
       return 'income';
@@ -31,8 +33,8 @@ export function kindForTransaction(t: TransactionDTO): QuickAddKind | null {
     case 'EXPENSE':
     case 'CARD_PURCHASE':
       return 'expense';
-    default:
-      return null;
+    case 'DEBT_DISBURSEMENT':
+      return 'disbursement';
   }
 }
 
@@ -75,6 +77,9 @@ export function QuickAddSheets() {
       )}
       {kind === 'loan-payment' && (
         <PayLoanForm debtId={request?.debtId} edit={edit} onDone={close} />
+      )}
+      {kind === 'disbursement' && edit && (
+        <DisbursementForm debtId={edit.debt?.id ?? ''} edit={edit} onDone={close} />
       )}
     </Sheet>
   );

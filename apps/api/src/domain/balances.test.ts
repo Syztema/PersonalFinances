@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AccountType } from '@finanzas/shared';
-import { monthFlows, summarizeDebts, summarizeMoney } from './balances';
+import { monthFlows, projectedIncome, summarizeDebts, summarizeMoney } from './balances';
 import type { LedgerEntry } from './ledger';
 
 describe('summarizeMoney', () => {
@@ -90,5 +90,13 @@ describe('monthFlows', () => {
     expect(flows.expense).toBe(0);
     expect(flows.savings).toBe(300_000);
     expect(flows.investment).toBe(100_000);
+  });
+});
+
+describe('projectedIncome (spec 8.8)', () => {
+  it('adds received and expected income, and falls back to the estimate', () => {
+    expect(projectedIncome(4_000_000, 1_000_000, 3_000_000)).toBe(5_000_000);
+    expect(projectedIncome(0, 0, 3_000_000)).toBe(3_000_000);
+    expect(projectedIncome(0, 0, null)).toBe(0);
   });
 });

@@ -31,10 +31,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             role="status"
             className={cn(
-              'pointer-events-auto w-full max-w-md rounded-xl px-4 py-3 text-sm text-white shadow-lg',
-              t.tone === 'success' && 'bg-slate-900',
-              t.tone === 'warning' && 'bg-warning',
-              t.tone === 'error' && 'bg-negative',
+              'pointer-events-auto w-full max-w-md rounded-xl px-4 py-3 text-sm shadow-lg',
+              t.tone === 'success' && 'bg-fg text-bg',
+              t.tone === 'warning' && 'bg-warning text-warning-fg',
+              t.tone === 'error' && 'bg-negative text-negative-fg',
             )}
           >
             {t.message}

@@ -1,4 +1,4 @@
-import { formatCOP, type DebtDTO } from '@finanzas/shared';
+import { formatCOP, type DebtDTO, type DeleteResultDTO } from '@finanzas/shared';
 import { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { ConfirmButton } from '../../components/ui/ConfirmButton';
@@ -51,11 +51,11 @@ function DebtForm({ debt, onDone }: { debt?: DebtDTO; onDone: () => void }) {
       debt ? api.put(`/debts/${debt.id}`, body) : api.post('/debts', body),
     debt ? 'Préstamo actualizado' : 'Préstamo creado',
   );
-  const archive = useCrudMutation(
-    () => api.put(`/debts/${debt!.id}`, { isActive: !debt!.isActive }),
-    debt?.isActive ? 'Préstamo archivado' : 'Préstamo reactivado',
+  const remove = useCrudMutation(
+    () => api.del<DeleteResultDTO>(`/debts/${debt!.id}`),
+    (r) =>
+      r.deleted === 'soft' ? 'Préstamo eliminado: se conserva su historial' : 'Préstamo eliminado',
   );
-  const remove = useCrudMutation(() => api.del(`/debts/${debt!.id}`), 'Préstamo eliminado');
   const onError = (err: ApiError) => {
     const mapped = toFormErrors(err, ['name', 'initialBalance', 'paymentDay']);
     setFields(mapped);
@@ -188,20 +188,18 @@ function DebtForm({ debt, onDone }: { debt?: DebtDTO; onDone: () => void }) {
         Guardar préstamo
       </Button>
       {debt && (
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="secondary"
-            loading={archive.isPending}
-            onClick={() => archive.mutate(undefined, { onSuccess: onDone, onError })}
-          >
-            {debt.isActive ? 'Archivar' : 'Reactivar'}
-          </Button>
+        <div className="space-y-2">
           <ConfirmButton
+            size="lg"
             loading={remove.isPending}
             onConfirm={() => remove.mutate(undefined, { onSuccess: onDone, onError })}
           >
-            Eliminar
+            Eliminar préstamo
           </ConfirmButton>
+          <p className="text-xs text-muted">
+            Para eliminarlo debe tener saldo $0. Si tiene movimientos, se oculta y su historial se
+            conserva.
+          </p>
         </div>
       )}
     </form>

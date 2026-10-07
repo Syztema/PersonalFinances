@@ -2,22 +2,25 @@ import {
   formatCOP,
   SYSTEM_CATEGORY_KEYS,
   type IsoDate,
+  type RecurringOnCreateInput,
   type TransactionDTO,
   type TransactionInput,
   type TransactionResultDTO,
+  type TransactionType,
   type WarningCode,
 } from '@finanzas/shared';
-import type { Prisma, PrismaClient } from '../../generated/prisma/client';
+import type { Prisma, PrismaClient, Transaction } from '../../generated/prisma/client';
 import { fromDbDate, num, toDbDate } from '../../lib/db';
-import { badRequest, notFound } from '../../lib/errors';
+import { badRequest, entityDeleted, notFound } from '../../lib/errors';
 import type { DbClient } from '../../lib/prisma';
 import type { AuthContext } from '../../types/fastify';
 import { accountBalance } from '../accounts/service';
 import { findSystemCategory } from '../categories/service';
 import { cardDebt } from '../credit-cards/service';
 import { loanBalance } from '../debts/service';
+import { applyLink, prepareLink } from '../scheduled/link';
 import { toTransactionDTO, transactionInclude } from './mapper';
-import { resolveRefs, type ResolvedRefs } from './refs';
+import { resolveRefs, type ResolveOptions, type ResolvedRefs } from './refs';
 
 export function assertNotFuture(date: IsoDate, today: IsoDate) {
   if (date > today) {
@@ -65,6 +68,58 @@ export function rowData(input: TransactionInput) {
     case 'DEBT_DISBURSEMENT':
       return { ...common, debtId: input.debtId, accountId: input.accountId };
   }
+}
+
+const NO_REFS = {
+  accountId: null,
+  toAccountId: null,
+  creditCardId: null,
+  debtId: null,
+  categoryId: null,
+  goalId: null,
+  installments: null,
+  paymentMethod: null,
+};
+
+/** Fila completa del tipo: los campos que no aplican quedan en null (para editar y comparar). */
+export function fullRowData(input: TransactionInput) {
+  return { ...NO_REFS, type: input.type, ...rowData(input) };
+}
+
+const holder = { select: { name: true, isActive: true } } as const;
+type Holder = { name: string; isActive: boolean } | null;
+
+/** Nombre del primer elemento eliminado que toca el movimiento (su dinero queda congelado). */
+function deletedHolder(row: {
+  account: Holder;
+  toAccount: Holder;
+  creditCard: Holder;
+  debt: Holder;
+}): string | null {
+  return (
+    [row.account, row.toAccount, row.creditCard, row.debt].find((h) => h && !h.isActive)?.name ??
+    null
+  );
+}
+
+/** ¿La edición cambia algo que afecta saldos o deudas? */
+function changesMoney(
+  existing: Transaction & { children: Array<{ amount: bigint }> },
+  input: TransactionInput,
+): boolean {
+  const next = fullRowData(input);
+  return (
+    existing.type !== input.type ||
+    num(existing.amount) !== input.amount ||
+    fromDbDate(existing.date) !== input.date ||
+    existing.accountId !== next.accountId ||
+    existing.toAccountId !== next.toAccountId ||
+    existing.creditCardId !== next.creditCardId ||
+    existing.debtId !== next.debtId ||
+    existing.installments !== next.installments ||
+    (input.type === 'DEBT_PAYMENT' &&
+      existing.children.reduce((s, c) => s + num(c.amount), 0) !== input.interest)
+  );
 }
 
 export async function checkRules(
@@ -197,38 +252,85 @@ export async function getTransaction(
   return toTransactionDTO(row);
 }
 
+export interface PreparedTransaction {
+  input: TransactionInput;
+  refs: ResolvedRefs;
+  interestCategoryId: string | null;
+}
+
+/** Validaciones que solo leen (antes de abrir la transacción de base de datos). */
+export async function prepareTransaction(
+  db: DbClient,
+  auth: AuthContext,
+  input: TransactionInput,
+  options: ResolveOptions = {},
+): Promise<PreparedTransaction> {
+  assertNotFuture(input.date, auth.today);
+  const refs = await resolveRefs(db, auth.userId, input, undefined, options);
+  await checkRules(db, auth.userId, input, refs, []);
+  return { input, refs, interestCategoryId: await interestCategoryFor(db, auth.userId, input) };
+}
+
+/** Escribe el movimiento con sus etiquetas e intereses; se compone con otras escrituras. */
+export async function insertTransaction(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  p: PreparedTransaction,
+): Promise<string> {
+  const { input, refs } = p;
+  const row = await tx.transaction.create({
+    data: { userId, type: input.type, ...rowData(input) },
+    select: { id: true, date: true },
+  });
+  await syncTags(tx, userId, row.id, input.tags);
+  if (input.type === 'DEBT_PAYMENT') {
+    await syncInterest(
+      tx,
+      userId,
+      { id: row.id, date: row.date, accountId: input.accountId, debtName: refs.debt!.name },
+      input.interest,
+      p.interestCategoryId,
+    );
+  }
+  return row.id;
+}
+
+export async function transactionResult(
+  db: DbClient,
+  userId: string,
+  id: string,
+  p: PreparedTransaction,
+): Promise<TransactionResultDTO> {
+  return {
+    transaction: await getTransaction(db, userId, id),
+    warnings: await computeWarnings(db, userId, p.input, p.refs),
+  };
+}
+
+/** Campos que solo se aceptan al registrar (spec 8.11). */
+export function linkFieldsOf(input: TransactionInput): {
+  scheduledItemId: string | null;
+  recurring: RecurringOnCreateInput | null;
+} {
+  return input.type === 'INCOME' || input.type === 'EXPENSE' || input.type === 'CARD_PURCHASE'
+    ? { scheduledItemId: input.scheduledItemId ?? null, recurring: input.recurring ?? null }
+    : { scheduledItemId: null, recurring: null };
+}
+
 export async function createTransaction(
   db: PrismaClient,
   auth: AuthContext,
   input: TransactionInput,
 ): Promise<TransactionResultDTO> {
-  assertNotFuture(input.date, auth.today);
-  const refs = await resolveRefs(db, auth.userId, input);
-  await checkRules(db, auth.userId, input, refs, []);
-  const interestCategoryId = await interestCategoryFor(db, auth.userId, input);
-
+  const p = await prepareTransaction(db, auth, input);
+  const link = await prepareLink(db, auth.userId, input, linkFieldsOf(input));
+  const name = (input.description ?? p.refs.category?.name ?? 'Recurrente').slice(0, 60);
   const id = await db.$transaction(async (tx) => {
-    const row = await tx.transaction.create({
-      data: { userId: auth.userId, type: input.type, ...rowData(input) },
-      select: { id: true, date: true },
-    });
-    await syncTags(tx, auth.userId, row.id, input.tags);
-    if (input.type === 'DEBT_PAYMENT') {
-      await syncInterest(
-        tx,
-        auth.userId,
-        { id: row.id, date: row.date, accountId: input.accountId, debtName: refs.debt!.name },
-        input.interest,
-        interestCategoryId,
-      );
-    }
-    return row.id;
+    const created = await insertTransaction(tx, auth.userId, p);
+    await applyLink(tx, auth.userId, created, input, link, name);
+    return created;
   });
-
-  return {
-    transaction: await getTransaction(db, auth.userId, id),
-    warnings: await computeWarnings(db, auth.userId, input, refs),
-  };
+  return transactionResult(db, auth.userId, id, p);
 }
 
 export async function deleteTransaction(
@@ -238,7 +340,13 @@ export async function deleteTransaction(
 ): Promise<void> {
   const row = await db.transaction.findUnique({
     where: { id_userId: { id, userId } },
-    select: { parentId: true },
+    select: {
+      parentId: true,
+      account: holder,
+      toAccount: holder,
+      creditCard: holder,
+      debt: holder,
+    },
   });
   if (!row) throw notFound('Movimiento no encontrado.');
   if (row.parentId) {
@@ -247,6 +355,8 @@ export async function deleteTransaction(
       'Este movimiento es parte de un pago de préstamo. Edita o elimina el pago principal.',
     );
   }
+  const frozen = deletedHolder(row);
+  if (frozen) throw entityDeleted(frozen, 'eliminar este movimiento');
   await db.$transaction([
     db.scheduledItem.updateMany({
       where: { userId, transactionId: id },
@@ -256,6 +366,9 @@ export async function deleteTransaction(
   ]);
 }
 
+/** Addendum §4: elegir una cuenta o una tarjeta convierte el gasto en compra con tarjeta y viceversa. */
+const SWITCHABLE = new Set<TransactionType>(['EXPENSE', 'CARD_PURCHASE']);
+
 export async function updateTransaction(
   db: PrismaClient,
   auth: AuthContext,
@@ -264,6 +377,13 @@ export async function updateTransaction(
 ): Promise<TransactionResultDTO> {
   const existing = await db.transaction.findUnique({
     where: { id_userId: { id, userId: auth.userId } },
+    include: {
+      account: holder,
+      toAccount: holder,
+      creditCard: holder,
+      debt: holder,
+      children: { select: { amount: true } },
+    },
   });
   if (!existing) throw notFound('Movimiento no encontrado.');
   if (existing.parentId) {
@@ -272,11 +392,25 @@ export async function updateTransaction(
       'Este movimiento es parte de un pago de préstamo. Edita el pago principal.',
     );
   }
-  if (existing.type !== input.type) {
+  if (
+    existing.type !== input.type &&
+    !(SWITCHABLE.has(existing.type) && SWITCHABLE.has(input.type))
+  ) {
     throw badRequest(
       'TYPE_CHANGE_NOT_ALLOWED',
-      'No se puede cambiar el tipo de un movimiento. Elimínalo y crea uno nuevo.',
+      'Elimina el movimiento y regístralo de nuevo con el tipo correcto.',
     );
+  }
+  const link = linkFieldsOf(input);
+  if (link.scheduledItemId || link.recurring) {
+    throw badRequest(
+      'LINK_ON_EDIT',
+      'Solo puedes enlazar una obligación o marcarlo como recurrente al registrarlo.',
+    );
+  }
+  const frozen = deletedHolder(existing);
+  if (frozen && changesMoney(existing, input)) {
+    throw entityDeleted(frozen, 'modificar este movimiento');
   }
   assertNotFuture(input.date, auth.today);
   const refs = await resolveRefs(db, auth.userId, input, existing);
@@ -290,7 +424,7 @@ export async function updateTransaction(
   await db.$transaction(async (tx) => {
     const row = await tx.transaction.update({
       where: { id_userId: { id, userId: auth.userId } },
-      data: rowData(input),
+      data: fullRowData(input),
       select: { id: true, date: true },
     });
     await syncTags(tx, auth.userId, id, input.tags);

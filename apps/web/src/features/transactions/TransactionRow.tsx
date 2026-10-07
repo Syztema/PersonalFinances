@@ -1,5 +1,6 @@
 import type { TransactionDTO } from '@finanzas/shared';
 import { Amount } from '../../components/ui/Amount';
+import { cn } from '../../lib/cn';
 import { Icon } from '../../lib/icons';
 import { describeTransaction } from './describe';
 
@@ -18,7 +19,10 @@ export function TransactionRow({
       className="flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left"
     >
       <span
-        className="flex size-10 shrink-0 items-center justify-center rounded-full text-white"
+        className={cn(
+          'flex size-10 shrink-0 items-center justify-center rounded-full',
+          d.colorIsToken ? 'text-surface' : 'text-white',
+        )}
         style={{ backgroundColor: d.color }}
       >
         <Icon name={d.icon} size={18} />

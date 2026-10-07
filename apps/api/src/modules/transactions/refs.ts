@@ -21,6 +21,11 @@ export interface ExistingRefs {
   categoryId: string | null;
 }
 
+export interface ResolveOptions {
+  /** Ajuste de saldo: usa una categoría del sistema. */
+  allowSystemCategory?: boolean;
+}
+
 type RefKey = keyof ExistingRefs | 'goalId';
 
 function refId(input: TransactionInput, key: RefKey): string | null {
@@ -33,6 +38,7 @@ export async function resolveRefs(
   userId: string,
   input: TransactionInput,
   existing?: ExistingRefs,
+  options: ResolveOptions = {},
 ): Promise<ResolvedRefs> {
   const ids = {
     accountId: refId(input, 'accountId'),
@@ -65,17 +71,20 @@ export async function resolveRefs(
     if (!entity) fields[k] = missing;
     else if (!entity.isActive && !unchanged(k)) fields[k] = archived;
   };
-  checkActive('accountId', account, 'Cuenta no encontrada', 'La cuenta está archivada');
-  checkActive('toAccountId', toAccount, 'Cuenta no encontrada', 'La cuenta está archivada');
-  checkActive('creditCardId', card, 'Tarjeta no encontrada', 'La tarjeta está archivada');
-  checkActive('debtId', debt, 'Préstamo no encontrado', 'El préstamo está archivado');
+  checkActive('accountId', account, 'Cuenta no encontrada', 'La cuenta fue eliminada');
+  checkActive('toAccountId', toAccount, 'Cuenta no encontrada', 'La cuenta fue eliminada');
+  checkActive('creditCardId', card, 'Tarjeta no encontrada', 'La tarjeta fue eliminada');
+  checkActive('debtId', debt, 'Préstamo no encontrado', 'El préstamo fue eliminado');
 
   if (ids.categoryId) {
     const expected = input.type === 'INCOME' ? 'INCOME' : 'EXPENSE';
     if (!category) fields.categoryId = 'Categoría no encontrada';
     else if (category.kind !== expected)
       fields.categoryId = 'La categoría no corresponde al tipo de movimiento';
-    else if ((category.isSystem || !category.isActive) && !unchanged('categoryId'))
+    else if (
+      ((category.isSystem && !options.allowSystemCategory) || !category.isActive) &&
+      !unchanged('categoryId')
+    )
       fields.categoryId = 'Categoría no disponible';
   }
 

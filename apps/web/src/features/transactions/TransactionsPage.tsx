@@ -1,5 +1,5 @@
 import type { Page, TransactionDTO } from '@finanzas/shared';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { ListFilter, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/ui/Button';
@@ -39,6 +39,7 @@ export function TransactionsPage() {
       ),
     initialPageParam: '',
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+    placeholderData: keepPreviousData,
   });
 
   const sentinel = useRef<HTMLDivElement>(null);

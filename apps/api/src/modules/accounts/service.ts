@@ -1,13 +1,34 @@
-import type { AccountCreateInput, AccountDTO, AccountUpdateInput } from '@finanzas/shared';
+import {
+  formatCOP,
+  type AccountCreateInput,
+  type AccountDTO,
+  type AccountUpdateInput,
+  type DeleteResultDTO,
+} from '@finanzas/shared';
 import { applyLedger } from '../../domain/ledger';
-import type { Account } from '../../generated/prisma/client';
+import type { Account, PrismaClient } from '../../generated/prisma/client';
 import { fromDbDate, num, toDbDate } from '../../lib/db';
-import { conflict, isUniqueViolation, notFound } from '../../lib/errors';
+import { conflict, entityDeleted, isUniqueViolation, notFound } from '../../lib/errors';
 import type { DbClient } from '../../lib/prisma';
 import type { AuthContext } from '../../types/fastify';
 import { ledgerEntries } from '../ledger/repository';
+import { cascadeSoftDelete } from '../planning/cascade';
 
 const NAME_TAKEN = () => conflict('ACCOUNT_NAME_TAKEN', 'Ya tienes una cuenta con ese nombre.');
+
+/** Un nombre ocupado por una cuenta eliminada se recupera restaurándola (addendum §3.1). */
+async function nameTaken(db: DbClient, userId: string, name: string) {
+  const other = await db.account.findUnique({
+    where: { userId_name: { userId, name } },
+    select: { isActive: true },
+  });
+  return other && !other.isActive
+    ? conflict(
+        'ACCOUNT_NAME_TAKEN',
+        'Ya tienes una cuenta eliminada con ese nombre. Restáurala desde Eliminados.',
+      )
+    : NAME_TAKEN();
+}
 
 export function toAccountDTO(a: Account, balance: number): AccountDTO {
   return {
@@ -84,7 +105,7 @@ export async function createAccount(
     });
     return toAccountDTO(account, num(account.initialBalance));
   } catch (err) {
-    if (isUniqueViolation(err)) throw NAME_TAKEN();
+    if (isUniqueViolation(err)) throw await nameTaken(db, auth.userId, input.name);
     throw err;
   }
 }
@@ -96,14 +117,7 @@ export async function updateAccount(
   input: AccountUpdateInput,
 ): Promise<AccountDTO> {
   const account = await findAccount(db, userId, id);
-
-  if (input.isActive === false && account.isActive) {
-    const initialChange =
-      input.initialBalance !== undefined ? input.initialBalance - num(account.initialBalance) : 0;
-    if ((await accountBalance(db, userId, account)) + initialChange !== 0) {
-      throw conflict('ACCOUNT_HAS_BALANCE', 'Solo puedes archivar una cuenta con saldo $0.');
-    }
-  }
+  if (!account.isActive) throw entityDeleted(account.name, 'editarla');
   if (input.type && input.type !== 'SAVINGS' && input.type !== 'INVESTMENT') {
     if ((await db.goal.count({ where: { userId, accountId: id } })) > 0) {
       throw conflict(
@@ -112,7 +126,6 @@ export async function updateAccount(
       );
     }
   }
-
   try {
     const updated = await db.account.update({
       where: { id_userId: { id, userId } },
@@ -125,30 +138,63 @@ export async function updateAccount(
         openingDate: input.openingDate ? toDbDate(input.openingDate) : undefined,
         icon: input.icon,
         color: input.color,
-        isActive: input.isActive,
         sortOrder: input.sortOrder,
       },
     });
     return toAccountDTO(updated, await accountBalance(db, userId, updated));
   } catch (err) {
-    if (isUniqueViolation(err)) throw NAME_TAKEN();
+    if (isUniqueViolation(err)) throw await nameTaken(db, userId, input.name ?? account.name);
     throw err;
   }
 }
 
-export async function deleteAccount(db: DbClient, userId: string, id: string): Promise<void> {
-  await findAccount(db, userId, id);
-  const [transactions, goals, rules, items] = await Promise.all([
+/** Addendum §3: sin referencias se borra; con historial se elimina lógicamente. Exige saldo $0. */
+export async function deleteAccount(
+  db: PrismaClient,
+  auth: AuthContext,
+  id: string,
+): Promise<DeleteResultDTO> {
+  const { userId } = auth;
+  const account = await findAccount(db, userId, id);
+  if (!account.isActive) return { deleted: 'soft' };
+  const balance = await accountBalance(db, userId, account);
+  if (balance !== 0) {
+    throw conflict(
+      'ACCOUNT_HAS_BALANCE',
+      `La cuenta tiene un saldo de ${formatCOP(balance)}. Déjala en $0 antes de eliminarla: transfiere el dinero, ajusta el saldo o corrige el saldo inicial.`,
+    );
+  }
+  if ((await db.goal.count({ where: { userId, accountId: id } })) > 0) {
+    throw conflict(
+      'ACCOUNT_HAS_GOALS',
+      'Esta cuenta guarda metas. Elimínalas o muévelas a otra cuenta antes de eliminarla.',
+    );
+  }
+  const [transactions, rules, items] = await Promise.all([
     db.transaction.count({ where: { userId, OR: [{ accountId: id }, { toAccountId: id }] } }),
-    db.goal.count({ where: { userId, accountId: id } }),
     db.recurringRule.count({ where: { userId, accountId: id } }),
     db.scheduledItem.count({ where: { userId, accountId: id } }),
   ]);
-  if (transactions + goals + rules + items > 0) {
-    throw conflict(
-      'ACCOUNT_IN_USE',
-      'Esta cuenta tiene movimientos. Archívala en lugar de eliminarla.',
-    );
+  if (transactions + rules + items === 0) {
+    await db.account.delete({ where: { id_userId: { id, userId } } });
+    return { deleted: 'hard' };
   }
-  await db.account.delete({ where: { id_userId: { id, userId } } });
+  await db.$transaction(async (tx) => {
+    await tx.account.update({ where: { id_userId: { id, userId } }, data: { isActive: false } });
+    await cascadeSoftDelete(tx, userId, { accountId: id }, auth.today);
+  });
+  return { deleted: 'soft' };
+}
+
+export async function restoreAccount(
+  db: DbClient,
+  userId: string,
+  id: string,
+): Promise<AccountDTO> {
+  await findAccount(db, userId, id);
+  const account = await db.account.update({
+    where: { id_userId: { id, userId } },
+    data: { isActive: true },
+  });
+  return toAccountDTO(account, await accountBalance(db, userId, account));
 }

@@ -134,7 +134,7 @@ describe('update', () => {
       accountId: f.cash,
       categoryId: f.cat.food,
     });
-    await api.put(`/api/accounts/${f.cash}`, { isActive: false });
+    await api.del(`/api/accounts/${f.cash}`);
     const sameAccount = await api.put(`/api/transactions/${old.body.transaction.id}`, {
       type: 'EXPENSE',
       amount: 100_000,
@@ -312,5 +312,12 @@ describe('list', () => {
     expect((await api.get(`/api/transactions?categoryId=${f.cat.food}`)).body.items).toHaveLength(
       2,
     );
+  });
+
+  it('rejects a date range whose end is before its start', async () => {
+    const { api } = await newUser();
+    const res = await api.get('/api/transactions?from=2026-10-20&to=2026-10-01');
+    expect(res.status).toBe(400);
+    expect(res.body.error.fields.to).toBeTypeOf('string');
   });
 });

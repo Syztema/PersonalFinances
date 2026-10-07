@@ -1,6 +1,7 @@
 import Fastify, { LogController, type FastifyInstance } from 'fastify';
 import type { AppConfig } from './config/env';
 import type { PrismaClient } from './generated/prisma/client';
+import { AttemptLimiter } from './lib/attempt-limiter';
 import { createMailer, type Mailer } from './lib/mailer';
 import { createPrisma } from './lib/prisma';
 import { accountRoutes } from './modules/accounts/routes';
@@ -13,6 +14,12 @@ import { creditCardRoutes } from './modules/credit-cards/routes';
 import { debtRoutes } from './modules/debts/routes';
 import { transactionRoutes } from './modules/transactions/routes';
 import { dashboardRoutes } from './modules/dashboard/routes';
+import { recurringRoutes } from './modules/recurring/routes';
+import { scheduledRoutes } from './modules/scheduled/routes';
+import { settingsRoutes } from './modules/settings/routes';
+import { budgetRoutes } from './modules/budgets/routes';
+import { alertRoutes } from './modules/alerts/routes';
+import { goalRoutes } from './modules/goals/routes';
 import { setupErrorHandling } from './plugins/errors';
 import { setupSecurity } from './plugins/security';
 import { setupSession } from './plugins/session';
@@ -44,6 +51,7 @@ export async function buildApp(config: AppConfig, deps: AppDeps = {}): Promise<F
   app.decorate('prisma', prisma);
   app.decorate('mailer', deps.mailer ?? createMailer(config, app.log));
   app.decorate('now', deps.now ?? (() => new Date()));
+  app.decorate('passwordLimiter', new AttemptLimiter(config.loginMaxAttempts, 15 * 60_000));
   app.addHook('onClose', async () => {
     if (!deps.prisma) await prisma.$disconnect();
   });
@@ -78,6 +86,12 @@ export async function buildApp(config: AppConfig, deps: AppDeps = {}): Promise<F
       await api.register(debtRoutes);
       await api.register(transactionRoutes);
       await api.register(dashboardRoutes);
+      await api.register(recurringRoutes);
+      await api.register(scheduledRoutes);
+      await api.register(settingsRoutes);
+      await api.register(budgetRoutes);
+      await api.register(goalRoutes);
+      await api.register(alertRoutes);
     },
     { prefix: '/api' },
   );

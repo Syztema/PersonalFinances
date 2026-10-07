@@ -15,3 +15,17 @@ export function writeJSON(key: string, value: unknown): void {
     // sin almacenamiento disponible: se ignora
   }
 }
+
+/** Comodidades locales de un usuario (no el tema): se olvidan al cerrar sesión o eliminar la cuenta. */
+export const LAST_SOURCE_KEY = 'fz:lastSource';
+export const CATEGORY_USE_KEY = 'fz:categoryUse';
+
+export function clearUserLocalData(): void {
+  for (const key of [LAST_SOURCE_KEY, CATEGORY_USE_KEY]) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // sin almacenamiento disponible: se ignora
+    }
+  }
+}

@@ -35,7 +35,7 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/budgets',
     lazy: page(
-      () => import('../features/more/BudgetsPage'),
+      () => import('../features/budgets/BudgetsPage'),
       (m) => m.BudgetsPage,
     ),
   },
@@ -68,10 +68,38 @@ export const appRoutes: RouteObject[] = [
     ),
   },
   {
+    path: '/goals',
+    lazy: page(
+      () => import('../features/goals/GoalsPage'),
+      (m) => m.GoalsPage,
+    ),
+  },
+  {
+    path: '/recurring',
+    lazy: page(
+      () => import('../features/recurring/RecurringPage'),
+      (m) => m.RecurringPage,
+    ),
+  },
+  {
     path: '/categories',
     lazy: page(
       () => import('../features/categories/CategoriesPage'),
       (m) => m.CategoriesPage,
+    ),
+  },
+  {
+    path: '/alerts',
+    lazy: page(
+      () => import('../features/alerts/AlertsPage'),
+      (m) => m.AlertsPage,
+    ),
+  },
+  {
+    path: '/settings',
+    lazy: page(
+      () => import('../features/settings/SettingsPage'),
+      (m) => m.SettingsPage,
     ),
   },
   {

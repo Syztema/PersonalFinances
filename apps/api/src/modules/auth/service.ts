@@ -1,9 +1,10 @@
 import type { ChangePasswordInput, RegisterInput, UserDTO } from '@finanzas/shared';
 import type { FastifyBaseLogger } from 'fastify';
 import type { PrismaClient, User } from '../../generated/prisma/client';
+import type { AttemptLimiter } from '../../lib/attempt-limiter';
 import { AppError, badRequest, conflict } from '../../lib/errors';
 import type { Mailer } from '../../lib/mailer';
-import { hashPassword, verifyPassword } from '../../lib/password';
+import { hashPassword, verifyPassword, verifyPasswordLimited } from '../../lib/password';
 import { generateToken, sha256Hex } from '../../lib/tokens';
 import type { AuthContext } from '../../types/fastify';
 import { DEFAULT_CATEGORIES } from '../categories/defaults';
@@ -75,9 +76,10 @@ export async function changePassword(
   db: PrismaClient,
   auth: AuthContext,
   input: ChangePasswordInput,
+  limiter: AttemptLimiter,
 ) {
   const user = await getUser(db, auth.userId);
-  if (!(await verifyPassword(user.passwordHash, input.currentPassword))) {
+  if (!(await verifyPasswordLimited(limiter, user.id, user.passwordHash, input.currentPassword))) {
     throw badRequest('INVALID_PASSWORD', 'La contraseña actual no es correcta.', {
       currentPassword: 'La contraseña actual no es correcta',
     });

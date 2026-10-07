@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { api } from '../../lib/api';
 import { qk } from '../../lib/queries';
+import { clearUserLocalData } from '../../lib/storage';
 
 export function useMe() {
   return useQuery({
@@ -35,6 +36,7 @@ export function useLogout() {
     mutationFn: () => api.post('/auth/logout'),
     onSettled: () => {
       queryClient.clear();
+      clearUserLocalData();
       navigate('/login', { replace: true });
     },
   });

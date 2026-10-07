@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { dayHeading, formatDate, formatPercent, formatShortDate, monthLabel } from './format';
+import {
+  dayHeading,
+  formatDate,
+  formatMonthYear,
+  formatPercent,
+  formatShortDate,
+  monthLabel,
+} from './format';
 
 describe('format', () => {
   it('formats dates in Spanish', () => {
@@ -14,5 +21,12 @@ describe('format', () => {
     expect(dayHeading('2026-10-05', '2026-10-06')).toBe('Ayer');
     expect(dayHeading('2026-10-02', '2026-10-06')).toBe('viernes 2 de octubre');
     expect(dayHeading('2025-12-31', '2026-10-06')).toBe('miércoles 31 de diciembre de 2025');
+  });
+});
+
+describe('formatMonthYear', () => {
+  it('names the month and the year', () => {
+    expect(formatMonthYear('2026-10')).toBe('octubre de 2026');
+    expect(formatMonthYear('2027-01')).toBe('enero de 2027');
   });
 });

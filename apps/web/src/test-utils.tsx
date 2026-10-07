@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router';
 import { vi } from 'vitest';
@@ -44,7 +45,14 @@ export const demoUser = {
   id: 'u1',
   name: 'Cristian',
   email: 'demo@example.com',
-  theme: 'SYSTEM',
+  theme: 'DARK',
   timezone: 'America/Bogota',
   createdAt: '2026-10-01T00:00:00.000Z',
 };
+
+/** Doble toque de ConfirmButton (exige 400 ms entre toques). Usar con vi.useFakeTimers({ shouldAdvanceTime: true }). */
+export async function confirmTwice(name: string) {
+  await userEvent.click(screen.getByRole('button', { name }));
+  await vi.advanceTimersByTimeAsync(500);
+  await userEvent.click(screen.getByRole('button', { name: '¿Seguro? Toca de nuevo' }));
+}

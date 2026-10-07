@@ -2,6 +2,7 @@ import {
   addMonths,
   endOfMonth,
   makeDate,
+  monthKey,
   startOfMonth,
   todayIn,
   yearMonth,
@@ -14,6 +15,10 @@ import { registerUser } from '../src/modules/auth/service';
 import { listCategories } from '../src/modules/categories/service';
 import { createCreditCard, getCreditCard } from '../src/modules/credit-cards/service';
 import { createDebt } from '../src/modules/debts/service';
+import { toDbDate } from '../src/lib/db';
+import { putBudget } from '../src/modules/budgets/service';
+import { createGoal } from '../src/modules/goals/service';
+import { ensureScheduled } from '../src/modules/recurring/service';
 import { createTransaction } from '../src/modules/transactions/service';
 
 export const DEMO_EMAIL = 'demo@example.com';
@@ -49,7 +54,7 @@ export async function seedDemo(prisma: PrismaClient, now: Date = new Date()) {
       icon,
       color,
     });
-  const bank = await account('Bancolombia', 'BANK', 1_200_000, 'landmark', '#ca8a04');
+  const bank = await account('Bancolombia', 'BANK', 2_500_000, 'landmark', '#ca8a04');
   const nequi = await account('Nequi', 'DIGITAL_WALLET', 150_000, 'smartphone', '#7c3aed');
   const cash = await account('Efectivo', 'CASH', 80_000, 'banknote', '#16a34a');
   const nu = await account('Nu', 'BANK', 400_000, 'wallet', '#8b5cf6');
@@ -77,6 +82,15 @@ export async function seedDemo(prisma: PrismaClient, now: Date = new Date()) {
     receivedInAccountId: null,
     icon: 'landmark',
     color: '#0f766e',
+  });
+  const goal = await createGoal(prisma, auth, {
+    name: 'Comprar computador',
+    targetAmount: 5_000_000,
+    targetDate: '2027-06-30',
+    accountId: savings.id,
+    initialAmount: 1_500_000,
+    icon: 'laptop',
+    color: '#0ea5e9',
   });
 
   const categories = await listCategories(prisma, user.id);
@@ -168,6 +182,7 @@ export async function seedDemo(prisma: PrismaClient, now: Date = new Date()) {
       amount: 400_000,
       accountId: bank.id,
       toAccountId: savings.id,
+      goalId: goal.id,
       description: 'Ahorro quincena',
     });
     add(day(20), 1, {
@@ -256,5 +271,108 @@ export async function seedDemo(prisma: PrismaClient, now: Date = new Date()) {
 
   events.sort((a, b) => (a.date === b.date ? a.order - b.order : a.date < b.date ? -1 : 1));
   for (const event of events) await event.run();
+
+  await putBudget(prisma, auth, monthKey(today), {
+    totalAmount: 4_200_000,
+    lines: [
+      { categoryId: cat('Alimentación'), amount: 900_000 },
+      { categoryId: cat('Transporte'), amount: 250_000 },
+      { categoryId: cat('Entretenimiento'), amount: 200_000 },
+      { categoryId: cat('Servicios'), amount: 150_000 },
+      { categoryId: cat('Suscripciones'), amount: 60_000 },
+    ],
+  });
+
+  const { year: startYear, month: startMonth } = yearMonth(start);
+  const rule = (r: {
+    name: string;
+    kind: 'INCOME' | 'EXPENSE';
+    amount: number;
+    categoryId: string;
+    accountId?: string;
+    creditCardId?: string;
+    frequency: 'MONTHLY' | 'SEMIMONTHLY';
+    day: number;
+  }) =>
+    prisma.recurringRule.create({
+      data: {
+        userId: user.id,
+        name: r.name,
+        kind: r.kind,
+        amount: BigInt(r.amount),
+        categoryId: r.categoryId,
+        accountId: r.accountId ?? null,
+        creditCardId: r.creditCardId ?? null,
+        frequency: r.frequency,
+        day1: r.frequency === 'SEMIMONTHLY' ? 15 : null,
+        day2: r.frequency === 'SEMIMONTHLY' ? 31 : null,
+        startDate: toDbDate(makeDate(startYear, startMonth, r.day)),
+        activeFrom: toDbDate(start),
+      },
+    });
+  await rule({
+    name: 'Arriendo',
+    kind: 'EXPENSE',
+    amount: 1_000_000,
+    categoryId: cat('Vivienda'),
+    accountId: bank.id,
+    frequency: 'MONTHLY',
+    day: 1,
+  });
+  await rule({
+    name: 'Internet',
+    kind: 'EXPENSE',
+    amount: 90_000,
+    categoryId: cat('Servicios'),
+    accountId: bank.id,
+    frequency: 'MONTHLY',
+    day: 10,
+  });
+  await rule({
+    name: 'Netflix',
+    kind: 'EXPENSE',
+    amount: 38_900,
+    categoryId: cat('Suscripciones'),
+    creditCardId: card.id,
+    frequency: 'MONTHLY',
+    day: 12,
+  });
+  await rule({
+    name: 'Salario',
+    kind: 'INCOME',
+    amount: 2_000_000,
+    categoryId: cat('Salario', 'INCOME'),
+    accountId: bank.id,
+    frequency: 'SEMIMONTHLY',
+    day: 15,
+  });
+  await ensureScheduled(prisma, user.id, today);
+  await linkPastOccurrences(prisma, user.id, today);
   return { userId: user.id };
+}
+
+/** Las ocurrencias pasadas del demo ya se pagaron: se enlazan con el movimiento sembrado ese día. */
+async function linkPastOccurrences(prisma: PrismaClient, userId: string, today: IsoDate) {
+  const items = await prisma.scheduledItem.findMany({
+    where: { userId, status: 'PENDING', dueDate: { lte: toDbDate(today) } },
+  });
+  for (const item of items) {
+    const tx = await prisma.transaction.findFirst({
+      where: {
+        userId,
+        categoryId: item.categoryId,
+        date: item.dueDate,
+        amount: item.amount,
+        accountId: item.accountId,
+        creditCardId: item.creditCardId,
+        scheduledItem: { is: null },
+      },
+    });
+    if (tx) {
+      await prisma.scheduledItem.update({
+        where: { id: item.id },
+        data: { status: 'DONE', transactionId: tx.id },
+      });
+    }
+  }
 }

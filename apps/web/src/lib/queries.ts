@@ -1,5 +1,17 @@
-import type { AccountDTO, CategoryDTO, CreditCardDTO, DebtDTO } from '@finanzas/shared';
-import { useQuery, type QueryClient } from '@tanstack/react-query';
+import type {
+  AccountDTO,
+  AlertDTO,
+  BudgetDTO,
+  CategoryDTO,
+  CreditCardDTO,
+  DebtDTO,
+  FinancialSettingsResponse,
+  GoalDTO,
+  RecurringRuleDTO,
+  ScheduledItemDTO,
+  StatusDTO,
+} from '@finanzas/shared';
+import { keepPreviousData, useQuery, type QueryClient } from '@tanstack/react-query';
 import { api } from './api';
 
 export const qk = {
@@ -12,14 +24,34 @@ export const qk = {
   categories: ['categories'] as const,
   tags: ['tags'] as const,
   transactions: ['transactions'] as const,
+  goals: ['goals'] as const,
+  recurring: ['recurring'] as const,
+  scheduled: ['scheduled'] as const,
+  budgets: ['budgets'] as const,
+  budget: (month: string) => ['budgets', month] as const,
+  settings: ['settings'] as const,
+  alerts: ['alerts'] as const,
 };
 
-/** Después de cualquier movimiento: saldos, deudas, dashboard e historial cambian. */
+/** Después de cualquier cambio de dinero o de planificación, todo lo calculado puede cambiar. */
 export function invalidateFinance(queryClient: QueryClient) {
   return Promise.all(
-    [qk.dashboard, qk.accounts, qk.cards, qk.debts, qk.transactions, qk.tags].map((queryKey) =>
-      queryClient.invalidateQueries({ queryKey }),
-    ),
+    [
+      qk.dashboard,
+      qk.accounts,
+      qk.cards,
+      qk.debts,
+      qk.transactions,
+      qk.tags,
+      // Un pago de préstamo con intereses puede restaurar la categoría "Intereses y comisiones".
+      qk.categories,
+      qk.goals,
+      qk.recurring,
+      qk.scheduled,
+      qk.budgets,
+      qk.settings,
+      qk.alerts,
+    ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
   );
 }
 
@@ -36,4 +68,29 @@ export const useCategories = () =>
     queryKey: qk.categories,
     queryFn: () => items<CategoryDTO>('/categories'),
     staleTime: 5 * 60_000,
+  });
+export const useGoals = () =>
+  useQuery({ queryKey: qk.goals, queryFn: () => items<GoalDTO>('/goals') });
+export const useRules = () =>
+  useQuery({ queryKey: qk.recurring, queryFn: () => items<RecurringRuleDTO>('/recurring') });
+export const useScheduled = (params: string) =>
+  useQuery({
+    queryKey: [...qk.scheduled, params],
+    queryFn: () => items<ScheduledItemDTO>(`/scheduled?${params}`),
+  });
+export const useBudget = (month: string) =>
+  useQuery({
+    queryKey: qk.budget(month),
+    queryFn: () => api.get<{ budget: BudgetDTO }>(`/budgets/${month}`).then((r) => r.budget),
+    placeholderData: keepPreviousData,
+  });
+export const useFinancialSettings = () =>
+  useQuery({
+    queryKey: qk.settings,
+    queryFn: () => api.get<FinancialSettingsResponse>('/settings/financial'),
+  });
+export const useAlerts = () =>
+  useQuery({
+    queryKey: qk.alerts,
+    queryFn: () => api.get<{ items: AlertDTO[]; status: StatusDTO }>('/alerts'),
   });

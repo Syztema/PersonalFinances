@@ -151,4 +151,59 @@ describe('database constraints', () => {
     await prisma.user.delete({ where: { id: c.user.id } });
     expect(await prisma.account.count({ where: { userId: c.user.id } })).toBe(0);
   });
+
+  it('Fase 2: new users get the dark theme by default', async () => {
+    const c = await makeUser();
+    expect(c.user.theme).toBe('DARK');
+  });
+
+  it('Fase 2: an occurrence keeps its rule date while its due date moves', async () => {
+    const rule = await prisma.recurringRule.create({
+      data: {
+        userId: a.user.id,
+        name: 'Internet',
+        kind: 'EXPENSE',
+        amount: 90_000n,
+        categoryId: a.category.id,
+        accountId: a.account.id,
+        frequency: 'MONTHLY',
+        startDate: toDbDate('2026-10-10'),
+        activeFrom: toDbDate('2026-10-10'),
+      },
+    });
+    const item = (ruleDate: string, dueDate: string) =>
+      prisma.scheduledItem.create({
+        data: {
+          userId: a.user.id,
+          recurringRuleId: rule.id,
+          kind: 'EXPENSE',
+          name: 'Internet',
+          amount: 90_000n,
+          categoryId: a.category.id,
+          accountId: a.account.id,
+          ruleDate: toDbDate(ruleDate),
+          dueDate: toDbDate(dueDate),
+        },
+      });
+    await item('2026-10-10', '2026-11-10');
+    // Misma fecha de vencimiento con otra fecha de regla: permitido.
+    await expect(item('2026-11-10', '2026-11-10')).resolves.toBeTruthy();
+    // Misma fecha de regla: rechazado (la regeneración no duplica).
+    await expect(item('2026-10-10', '2026-10-12')).rejects.toThrow();
+    // Ocurrencia de regla sin ruleDate: rechazada.
+    await expect(
+      prisma.scheduledItem.create({
+        data: {
+          userId: a.user.id,
+          recurringRuleId: rule.id,
+          kind: 'EXPENSE',
+          name: 'Internet',
+          amount: 90_000n,
+          categoryId: a.category.id,
+          accountId: a.account.id,
+          dueDate: toDbDate('2026-12-10'),
+        },
+      }),
+    ).rejects.toThrow();
+  });
 });

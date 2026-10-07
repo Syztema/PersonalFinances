@@ -4,7 +4,7 @@ Aplicación web para controlar finanzas personales en **pesos colombianos (COP)*
 
 > Finanzas es un asistente basado únicamente en los datos que registras. No es asesoría financiera profesional.
 
-## Qué hace (Fase 1)
+## Qué hace
 
 - Cuentas de dinero (efectivo, bancos, billeteras como Nequi o Daviplata, ahorro, inversión) con saldo calculado.
 - Tarjetas de crédito con cupo, deuda, cuotas, día de corte y de pago, y "pago del mes" estimado.
@@ -21,8 +21,16 @@ Aplicación web para controlar finanzas personales en **pesos colombianos (COP)*
 | Pago de préstamo (capital)       | −                   | −     | —             |
 | Desembolso de préstamo           | +                   | +     | —             |
 
-- Dashboard: dinero total, disponible estimado (con su desglose), deudas, patrimonio, balance del mes, cuentas, tarjetas y préstamos.
+- Dashboard: cuánto puedo gastar hoy (con su desglose), dinero total, disponible estimado, deudas y patrimonio, estado general con las alertas principales, balance del mes con el uso del presupuesto, cuentas, tarjetas, préstamos y metas.
 - Historial con búsqueda, filtros (fecha, tipo, cuenta, tarjeta, categoría, etiqueta, método, valor) y paginación.
+- **¿Cuánto puedo gastar hoy?**: una cifra diaria que respeta tus próximos pagos (obligaciones, tarjetas y cuotas), el ahorro que te propones y el presupuesto, con su desglose.
+- Presupuestos mensuales (general y por categoría) con proyección y alertas al 50, 75, 90 y 100 %; se copian del mes anterior.
+- Metas de ahorro en cuentas de ahorro o inversión: abonar y retirar son transferencias, no gastos.
+- Recurrentes y obligaciones: reglas semanales, quincenales, mensuales, anuales o cada N días; pagos únicos e ingresos esperados; "Pagar" crea el movimiento real y al registrar un gasto la app pregunta "¿Es el pago de…?".
+- Alertas y estado general (vas bien · cuidado · debes controlar tus gastos), con opción de descartarlas.
+- Porcentajes objetivo de obligaciones, ahorro, inversión, entretenimiento y otros.
+- Todo editable o eliminable: eliminar conserva el historial (sección "Eliminados" con Restaurar); cuentas, tarjetas y préstamos se eliminan con saldo $0; ajuste de saldo; eliminar tu cuenta y todos tus datos.
+- Tema oscuro por defecto (claro o según el sistema, en Perfil).
 - Multiusuario con aislamiento total: cada consulta se filtra por usuario en el backend y la base de datos rechaza referencias entre usuarios.
 
 ## Arquitectura
@@ -100,6 +108,8 @@ Desarrollo: `apps/api/.env` (ver `apps/api/.env.example`). Producción: `.env` e
 - Crear una migración tras cambiar el esquema (solo en desarrollo): `npm run db:migrate -w @finanzas/api -- --name descripcion`.
 - Aplicar migraciones en producción: el contenedor `api` ejecuta `prisma migrate deploy` al arrancar.
 - Regenerar el cliente: `npm run db:generate -w @finanzas/api`.
+- La migración `fase2` pone el tema oscuro por defecto para los usuarios nuevos y cambia a "Oscuro" a quienes tenían "Según el sistema" (pueden volver a elegirlo en Perfil; quienes tenían "Claro" lo conservan). Además agrega `RecurringRule.activeFrom` y `ScheduledItem.ruleDate` (las ocurrencias de una regla no se duplican aunque se mueva su fecha).
+- La migración `budget_copied_from` guarda de qué mes se copió el presupuesto, para avisarlo hasta que lo edites o lo elimines.
 
 ## Pruebas, lint y build
 

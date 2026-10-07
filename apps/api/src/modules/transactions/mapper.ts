@@ -1,15 +1,14 @@
 import { deriveMethod, type TransactionDTO } from '@finanzas/shared';
 import type { Prisma } from '../../generated/prisma/client';
 import { fromDbDate, num } from '../../lib/db';
-
-const refSelect = { id: true, name: true, icon: true, color: true } as const;
+import { accountRefSelect, categoryRefSelect, refSelect } from '../../lib/selects';
 
 export const transactionInclude = {
-  account: { select: { ...refSelect, type: true } },
-  toAccount: { select: { ...refSelect, type: true } },
+  account: { select: accountRefSelect },
+  toAccount: { select: accountRefSelect },
   creditCard: { select: refSelect },
   debt: { select: refSelect },
-  category: { select: { ...refSelect, kind: true, parentId: true } },
+  category: { select: categoryRefSelect },
   tags: { select: { tag: { select: { name: true } } } },
   children: { select: { amount: true } },
 } satisfies Prisma.TransactionInclude;

@@ -28,7 +28,7 @@ export function Chips<T extends string>({
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            'inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition',
+            'inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
             value === o.value
               ? 'border-primary bg-primary/10 font-medium text-primary'
               : 'border-border bg-surface text-fg',

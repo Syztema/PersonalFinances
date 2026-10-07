@@ -26,10 +26,12 @@ export async function validateSession(db: DbClient, token: string, ttlDays: numb
   }
   let renewed = false;
   if (now - session.lastUsedAt.getTime() > RENEW_AFTER_MS) {
-    await db.session.update({
+    // updateMany no falla si un logout simultáneo ya borró la sesión: en ese caso ya no es válida.
+    const { count } = await db.session.updateMany({
       where: { id: session.id },
       data: { lastUsedAt: new Date(now), expiresAt: new Date(now + ttlDays * DAY_MS) },
     });
+    if (count === 0) return null;
     renewed = true;
   }
   return { session, timezone: session.user.timezone, renewed };

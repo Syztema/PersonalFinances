@@ -1,9 +1,18 @@
-import type { DashboardDTO } from '@finanzas/shared';
+import type { DashboardBudgetDTO, DashboardDTO } from '@finanzas/shared';
+import { Link } from 'react-router';
 import { Amount } from '../../components/ui/Amount';
 import { Card, CardTitle } from '../../components/ui/Card';
+import { ProgressBar } from '../../components/ui/ProgressBar';
 import { formatPercent } from '../../lib/format';
+import { projectionText } from '../budgets/projection';
 
-export function MonthCard({ data }: { data: DashboardDTO['thisMonth'] }) {
+export function MonthCard({
+  data,
+  budget,
+}: {
+  data: DashboardDTO['thisMonth'];
+  budget: DashboardBudgetDTO | null;
+}) {
   const rows: Array<[string, number, 'income' | 'expense' | 'balance']> = [
     ['Ingresos', data.income, 'income'],
     ['Gastos', data.expense, 'expense'],
@@ -34,6 +43,24 @@ export function MonthCard({ data }: { data: DashboardDTO['thisMonth'] }) {
           ? `Aún no registras ingresos este mes. Tu objetivo de ahorro es ${data.savingsTargetPct}%.`
           : `Ahorro actual: ${formatPercent(data.savingsRate)} de tus ingresos · objetivo ${data.savingsTargetPct}%.`}
       </p>
+      {budget ? (
+        <div className="mt-3 space-y-1 border-t border-border pt-3">
+          <div className="flex items-center justify-between text-sm">
+            <span>Presupuesto</span>
+            <span>
+              <Amount value={budget.spent} /> de <Amount value={budget.budget} />
+            </span>
+          </div>
+          <ProgressBar value={budget.usage} label="Uso del presupuesto" />
+          {budget.projectionExceedsOnDay !== null && (
+            <p className="text-sm text-warning">{projectionText(budget.projectionExceedsOnDay)}</p>
+          )}
+        </div>
+      ) : (
+        <Link to="/budgets" className="mt-2 inline-flex min-h-11 items-center text-sm text-primary">
+          Crear un presupuesto para este mes
+        </Link>
+      )}
     </Card>
   );
 }

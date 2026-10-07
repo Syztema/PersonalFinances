@@ -8,7 +8,7 @@ const VARIANTS: Record<Variant, string> = {
   primary: 'bg-primary text-primary-fg hover:opacity-90',
   secondary: 'bg-surface-2 text-fg hover:bg-border',
   ghost: 'bg-transparent text-fg hover:bg-surface-2',
-  danger: 'bg-negative text-white hover:opacity-90',
+  danger: 'bg-negative text-negative-fg hover:opacity-90',
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -33,7 +33,7 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(
-        'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 font-medium transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 font-medium transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
         VARIANTS[variant],
         size === 'sm' && 'min-h-11 px-3 text-sm',
         size === 'lg' && 'min-h-12 w-full text-base',

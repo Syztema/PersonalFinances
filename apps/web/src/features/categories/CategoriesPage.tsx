@@ -3,23 +3,34 @@ import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Chips } from '../../components/ui/Chips';
+import { DeletedSection } from '../../components/ui/DeletedSection';
 import { ErrorState } from '../../components/ui/EmptyState';
 import { PageSpinner } from '../../components/ui/Spinner';
 import { cn } from '../../lib/cn';
 import { Icon } from '../../lib/icons';
 import { useCategories } from '../../lib/queries';
+import { useRestore } from '../../lib/useRestore';
 import { CategoryFormSheet } from './CategoryFormSheet';
+import { TagsList } from './TagsList';
+
+type Tab = CategoryKind | 'TAGS';
 
 export function CategoriesPage() {
   const categories = useCategories();
-  const [kind, setKind] = useState<CategoryKind>('EXPENSE');
+  const [tab, setTab] = useState<Tab>('EXPENSE');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryDTO | undefined>();
+  const { restore, isRestoring } = useRestore(
+    (id) => `/categories/${id}/restore`,
+    'Categoría restaurada',
+  );
   if (categories.isPending) return <PageSpinner />;
   if (categories.isError)
     return <ErrorState error={categories.error} onRetry={() => void categories.refetch()} />;
 
-  const visible = categories.data.filter((c) => c.kind === kind && !c.isSystem);
+  const kind: CategoryKind = tab === 'INCOME' ? 'INCOME' : 'EXPENSE';
+  const ofKind = categories.data.filter((c) => c.kind === kind);
+  const visible = ofKind.filter((c) => c.isActive);
   const roots = visible.filter((c) => !c.parentId);
   const edit = (c?: CategoryDTO) => {
     setEditing(c);
@@ -42,9 +53,12 @@ export function CategoriesPage() {
           <Icon name={c.icon} size={16} />
         </span>
         <span className="flex-1">
-          <span className={cn('block', !c.isActive && 'text-muted line-through')}>{c.name}</span>
-          {!child && c.bucket && (
-            <span className="block text-xs text-muted">{BUCKET_LABELS[c.bucket]}</span>
+          <span className="block">{c.name}</span>
+          {c.systemKey ? (
+            <span className="block text-xs text-muted">Del sistema</span>
+          ) : (
+            !child &&
+            c.bucket && <span className="block text-xs text-muted">{BUCKET_LABELS[c.bucket]}</span>
           )}
         </span>
       </button>
@@ -55,29 +69,43 @@ export function CategoriesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Categorías</h1>
-        <Button size="sm" onClick={() => edit()} aria-label="Nueva categoría">
-          <Plus size={16} /> Nueva
-        </Button>
+        {tab !== 'TAGS' && (
+          <Button size="sm" onClick={() => edit()} aria-label="Nueva categoría">
+            <Plus size={16} /> Nueva
+          </Button>
+        )}
       </div>
       <Chips
-        ariaLabel="Tipo de categoría"
-        value={kind}
-        onChange={setKind}
+        ariaLabel="Qué ver"
+        value={tab}
+        onChange={setTab}
         options={[
           { value: 'EXPENSE', label: 'Gastos' },
           { value: 'INCOME', label: 'Ingresos' },
+          { value: 'TAGS', label: 'Etiquetas' },
         ]}
       />
-      <ul className="divide-y divide-border overflow-hidden rounded-2xl bg-surface ring-1 ring-border">
-        {roots.flatMap((root) => [
-          row(root),
-          ...visible.filter((c) => c.parentId === root.id).map((c) => row(c, true)),
-        ])}
-      </ul>
-      <p className="px-1 text-xs text-muted">
-        Ahorrar no es un gasto: para ahorrar, transfiere a una cuenta de ahorro. Pagar una tarjeta o
-        un préstamo tampoco es un gasto; solo los intereses lo son.
-      </p>
+      {tab === 'TAGS' ? (
+        <TagsList />
+      ) : (
+        <>
+          <ul className="divide-y divide-border overflow-hidden rounded-2xl bg-surface ring-1 ring-border">
+            {roots.flatMap((root) => [
+              row(root),
+              ...visible.filter((c) => c.parentId === root.id).map((c) => row(c, true)),
+            ])}
+          </ul>
+          <DeletedSection
+            items={ofKind.filter((c) => !c.isActive)}
+            isRestoring={isRestoring}
+            onRestore={(c) => restore(c.id)}
+          />
+          <p className="px-1 text-xs text-muted">
+            Ahorrar no es un gasto: para ahorrar, transfiere a una cuenta de ahorro. Pagar una
+            tarjeta o un préstamo tampoco es un gasto; solo los intereses lo son.
+          </p>
+        </>
+      )}
       <CategoryFormSheet open={open} onOpenChange={setOpen} kind={kind} category={editing} />
     </div>
   );

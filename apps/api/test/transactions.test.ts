@@ -69,7 +69,19 @@ describe('income and expense', () => {
     expect(wrongKind.status).toBe(400);
     expect(wrongKind.body.error.fields.categoryId).toBeTypeOf('string');
 
-    await api.put(`/api/accounts/${f.wallet}`, { isActive: false });
+    await api.post('/api/transfers', {
+      amount: 1000,
+      date: TODAY,
+      accountId: f.bank,
+      toAccountId: f.wallet,
+    });
+    await api.post('/api/transfers', {
+      amount: 1000,
+      date: TODAY,
+      accountId: f.wallet,
+      toAccountId: f.bank,
+    });
+    await api.del(`/api/accounts/${f.wallet}`);
     const archived = await api.post('/api/transactions', {
       type: 'EXPENSE',
       amount: 1000,
@@ -78,7 +90,7 @@ describe('income and expense', () => {
       categoryId: f.cat.food,
     });
     expect(archived.status).toBe(400);
-    expect(archived.body.error.fields.accountId).toMatch(/archivada/);
+    expect(archived.body.error.fields.accountId).toMatch(/eliminada/);
   });
 
   it('rejects future dates and warns about dates before the opening date', async () => {

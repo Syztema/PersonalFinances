@@ -4,16 +4,24 @@ import { Link } from 'react-router';
 import { Amount } from '../../components/ui/Amount';
 import { Button } from '../../components/ui/Button';
 import { EmptyState, ErrorState } from '../../components/ui/EmptyState';
+import { DeletedSection } from '../../components/ui/DeletedSection';
 import { PageSpinner } from '../../components/ui/Spinner';
 import { formatShortDate } from '../../lib/format';
 import { useCards } from '../../lib/queries';
+import { useRestore } from '../../lib/useRestore';
 import { CardFormSheet } from './CardFormSheet';
 
 export function CardsPage() {
   const cards = useCards();
   const [open, setOpen] = useState(false);
+  const { restore, isRestoring } = useRestore(
+    (id) => `/credit-cards/${id}/restore`,
+    'Tarjeta restaurada',
+  );
   if (cards.isPending) return <PageSpinner />;
   if (cards.isError) return <ErrorState error={cards.error} onRetry={() => void cards.refetch()} />;
+
+  const active = cards.data.filter((c) => c.isActive);
 
   return (
     <div className="space-y-4">
@@ -23,14 +31,14 @@ export function CardsPage() {
           <Plus size={16} /> Nueva
         </Button>
       </div>
-      {cards.data.length === 0 ? (
+      {active.length === 0 ? (
         <EmptyState
           title="Aún no tienes tarjetas"
           description="Registra tus tarjetas de crédito para controlar su deuda, cuotas y fechas de pago."
         />
       ) : (
         <ul className="divide-y divide-border overflow-hidden rounded-2xl bg-surface ring-1 ring-border">
-          {cards.data.map((c) => (
+          {active.map((c) => (
             <li key={c.id}>
               <Link to={`/cards/${c.id}`} className="flex min-h-16 items-center gap-3 px-4 py-3">
                 <span
@@ -39,10 +47,7 @@ export function CardsPage() {
                   aria-hidden
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="block font-medium">
-                    {c.name}{' '}
-                    {!c.isActive && <span className="text-xs text-muted">(archivada)</span>}
-                  </span>
+                  <span className="block font-medium">{c.name}</span>
                   <span className="block text-xs text-muted">
                     {c.amountDue > 0
                       ? `Pago del mes vence ${formatShortDate(c.dueDate)}`
@@ -50,14 +55,23 @@ export function CardsPage() {
                   </span>
                 </span>
                 <span className="text-right">
-                  <Amount
-                    value={Math.max(c.debt, 0)}
-                    tone={c.debt > 0 ? 'debt' : 'neutral'}
-                    className="block font-semibold"
-                  />
-                  <span className="text-xs text-muted">
-                    de <Amount value={c.creditLimit} />
-                  </span>
+                  {c.debt < 0 ? (
+                    <>
+                      <span className="block text-xs text-positive">Saldo a favor</span>
+                      <Amount value={-c.debt} className="block font-semibold" />
+                    </>
+                  ) : (
+                    <>
+                      <Amount
+                        value={c.debt}
+                        tone={c.debt > 0 ? 'debt' : 'neutral'}
+                        className="block font-semibold"
+                      />
+                      <span className="text-xs text-muted">
+                        de <Amount value={c.creditLimit} />
+                      </span>
+                    </>
+                  )}
                 </span>
                 <ChevronRight size={18} className="text-muted" aria-hidden />
               </Link>
@@ -65,6 +79,11 @@ export function CardsPage() {
           ))}
         </ul>
       )}
+      <DeletedSection
+        items={cards.data.filter((c) => !c.isActive)}
+        isRestoring={isRestoring}
+        onRestore={(c) => restore(c.id)}
+      />
       <CardFormSheet open={open} onOpenChange={setOpen} />
     </div>
   );

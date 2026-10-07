@@ -68,23 +68,26 @@ describe('categories', () => {
     expect(otherKind.body.category.bucket).toBeNull();
   });
 
-  it('protects system categories and categories in use', async () => {
+  it('system categories are editable; unused categories are deleted with their subcategories', async () => {
     const { api } = await registerUser(app);
     const items = (await api.get('/api/categories')).body.items as Cat[];
     const adjustment = items.find((c) => c.systemKey === 'ADJUSTMENT_EXPENSE')!;
     const interest = items.find((c) => c.systemKey === 'INTEREST')!;
     const food = items.find((c) => c.name === 'Alimentación')!;
 
-    expect((await api.put(`/api/categories/${adjustment.id}`, { name: 'Otro' })).status).toBe(409);
-    expect((await api.del(`/api/categories/${interest.id}`)).status).toBe(409);
-    const renamed = await api.put(`/api/categories/${interest.id}`, { name: 'Intereses' });
-    expect(renamed.status).toBe(200);
+    expect((await api.put(`/api/categories/${adjustment.id}`, { name: 'Otro' })).status).toBe(200);
+    expect((await api.put(`/api/categories/${interest.id}`, { name: 'Intereses' })).status).toBe(
+      200,
+    );
 
-    await api.post('/api/categories', { name: 'Domicilios', kind: 'EXPENSE', parentId: food.id });
-    expect((await api.del(`/api/categories/${food.id}`)).status).toBe(409);
-
-    const custom = await api.post('/api/categories', { name: 'Regalos', kind: 'EXPENSE' });
-    expect((await api.del(`/api/categories/${custom.body.category.id}`)).status).toBe(204);
+    const child = await api.post('/api/categories', {
+      name: 'Domicilios',
+      kind: 'EXPENSE',
+      parentId: food.id,
+    });
+    expect((await api.del(`/api/categories/${food.id}`)).body).toEqual({ deleted: 'hard' });
+    const after = (await api.get('/api/categories')).body.items as Cat[];
+    expect(after.find((c) => c.id === child.body.category.id)).toBeUndefined();
   });
 
   it('lists tags (empty for a new user)', async () => {

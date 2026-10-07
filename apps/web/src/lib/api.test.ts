@@ -63,4 +63,16 @@ describe('api client', () => {
     mockFetch(204);
     await expect(api.del('/accounts/x')).resolves.toBeUndefined();
   });
+
+  it('sends a JSON body with DELETE and returns the response', async () => {
+    const fetchMock = mockFetch(200, { deleted: 'soft' });
+    const result = await api.del<{ deleted: string }>('/me', { password: 'x' });
+    expect(result).toEqual({ deleted: 'soft' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/me', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: '{"password":"x"}',
+    });
+  });
 });

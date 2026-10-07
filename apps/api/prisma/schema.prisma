@@ -81,7 +81,7 @@ model User {
   name         String   @db.VarChar(80)
   email        String   @unique @db.VarChar(254)
   passwordHash String
-  theme        Theme    @default(SYSTEM)
+  theme        Theme    @default(DARK)
   timezone     String   @default("America/Bogota") @db.VarChar(64)
   createdAt    DateTime @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @db.Timestamptz(3)
@@ -322,6 +322,8 @@ model Budget {
   userId      String   @db.Uuid
   month       DateTime @db.Date
   totalAmount BigInt?
+  /// Mes ('YYYY-MM') del que se copió solo; null desde que el usuario guarda o vacía el mes.
+  copiedFrom  String?  @db.VarChar(7)
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
@@ -384,6 +386,8 @@ model RecurringRule {
   day2         Int?          @db.SmallInt
   startDate    DateTime      @db.Date
   endDate      DateTime?     @db.Date
+  /// Desde cuándo genera ocurrencias la versión actual de la regla (se mueve al editarla).
+  activeFrom   DateTime      @db.Date
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
@@ -405,6 +409,8 @@ model ScheduledItem {
   name            String          @db.VarChar(60)
   amount          BigInt
   dueDate         DateTime        @db.Date
+  /// Fecha que generó la regla; no cambia aunque se mueva `dueDate`. Nula en las únicas.
+  ruleDate        DateTime?       @db.Date
   categoryId      String          @db.Uuid
   accountId       String?         @db.Uuid
   creditCardId    String?         @db.Uuid
@@ -420,7 +426,7 @@ model ScheduledItem {
   creditCard    CreditCard?    @relation(fields: [creditCardId, userId], references: [id, userId], onDelete: NoAction)
   transaction   Transaction?   @relation(fields: [transactionId, userId], references: [id, userId], onDelete: NoAction)
 
-  @@unique([recurringRuleId, dueDate])
+  @@unique([recurringRuleId, ruleDate])
   @@unique([transactionId, userId])
   @@index([userId, status, dueDate])
 }

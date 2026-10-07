@@ -37,7 +37,6 @@ export const creditCardUpdateSchema = z.strictObject({
   paymentDueDay: zDayOfMonth.optional(),
   icon: zIcon.optional(),
   color: zColor.optional(),
-  isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(10000).optional(),
 });
 

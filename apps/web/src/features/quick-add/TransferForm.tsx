@@ -1,10 +1,13 @@
 import { ACCOUNT_TYPE_LABELS, type TransactionDTO } from '@finanzas/shared';
 import { useState } from 'react';
 import { Button } from '../../components/ui/Button';
+import { FrozenNote } from '../../components/ui/FrozenNote';
 import { Field, Select, TextInput } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { PageSpinner } from '../../components/ui/Spinner';
+import { formatDate } from '../../lib/format';
 import { useAccounts } from '../../lib/queries';
+import { frozenHolder, refName } from '../../lib/refs';
 import { useToday } from '../auth/useAuth';
 import { DateChips } from './DateChips';
 import { NeedsAccount } from './NeedsAccount';
@@ -21,6 +24,7 @@ export function TransferForm({ edit, onDone }: { edit?: TransactionDTO; onDone: 
   const [date, setDate] = useState(edit?.date ?? today);
   const [description, setDescription] = useState(edit?.description ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const frozen = frozenHolder(edit);
 
   if (accounts.isPending) return <PageSpinner />;
   const list = (accounts.data ?? []).filter(
@@ -75,7 +79,7 @@ export function TransferForm({ edit, onDone }: { edit?: TransactionDTO; onDone: 
 
   const options = list.map((a) => (
     <option key={a.id} value={a.id}>
-      {a.name} · {ACCOUNT_TYPE_LABELS[a.type]}
+      {refName(a)} · {ACCOUNT_TYPE_LABELS[a.type]}
     </option>
   ));
 
@@ -87,18 +91,25 @@ export function TransferForm({ edit, onDone }: { edit?: TransactionDTO; onDone: 
         submit();
       }}
     >
+      {frozen && <FrozenNote holder={frozen} editable={['la descripción']} />}
       <div>
         <MoneyInput
           aria-label="Valor"
           size="lg"
           autoFocus={!edit}
+          disabled={!!frozen}
           value={amount}
           onChange={setAmount}
         />
         {errors.amount && <p className="mt-1 text-center text-sm text-negative">{errors.amount}</p>}
       </div>
       <Field label="Desde" htmlFor="from" error={errors.accountId}>
-        <Select id="from" value={from} onChange={(e) => setFrom(e.target.value)}>
+        <Select
+          id="from"
+          value={from}
+          disabled={!!frozen}
+          onChange={(e) => setFrom(e.target.value)}
+        >
           <option value="">Elige una cuenta</option>
           {options}
         </Select>
@@ -109,14 +120,18 @@ export function TransferForm({ edit, onDone }: { edit?: TransactionDTO; onDone: 
         error={errors.toAccountId}
         hint="Mover dinero entre tus cuentas no es un gasto. Si va a una cuenta de ahorro, cuenta como ahorro."
       >
-        <Select id="to" value={to} onChange={(e) => setTo(e.target.value)}>
+        <Select id="to" value={to} disabled={!!frozen} onChange={(e) => setTo(e.target.value)}>
           <option value="">Elige una cuenta</option>
           {options}
         </Select>
       </Field>
       <div className="space-y-2">
         <p className="text-sm font-medium">Fecha</p>
-        <DateChips value={date} onChange={setDate} today={today} />
+        {frozen ? (
+          <p className="text-sm">{formatDate(date)}</p>
+        ) : (
+          <DateChips value={date} onChange={setDate} today={today} />
+        )}
       </div>
       <Field label="Descripción (opcional)" htmlFor="tdesc">
         <TextInput

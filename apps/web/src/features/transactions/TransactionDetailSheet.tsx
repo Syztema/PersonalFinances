@@ -8,6 +8,7 @@ import { useToast } from '../../components/ui/Toast';
 import { api, ApiError } from '../../lib/api';
 import { formatDate } from '../../lib/format';
 import { invalidateFinance } from '../../lib/queries';
+import { refName } from '../../lib/refs';
 import { useQuickAdd } from '../quick-add/QuickAddContext';
 import { kindForTransaction } from '../quick-add/QuickAddSheets';
 import { describeTransaction } from './describe';
@@ -41,11 +42,11 @@ export function TransactionDetailSheet({
   const rows: Array<[string, string | null | undefined]> = [
     ['Tipo', d.typeLabel],
     ['Fecha', formatDate(transaction.date)],
-    ['Categoría', transaction.category?.name],
-    ['Cuenta', transaction.account?.name],
-    ['Cuenta destino', transaction.toAccount?.name],
-    ['Tarjeta', transaction.creditCard?.name],
-    ['Préstamo', transaction.debt?.name],
+    ['Categoría', refName(transaction.category)],
+    ['Cuenta', refName(transaction.account)],
+    ['Cuenta destino', refName(transaction.toAccount)],
+    ['Tarjeta', refName(transaction.creditCard)],
+    ['Préstamo', refName(transaction.debt, '(eliminado)')],
     [
       'Cuotas',
       transaction.installments && transaction.installments > 1
@@ -84,18 +85,16 @@ export function TransactionDetailSheet({
           el pago principal.
         </p>
       ) : (
-        <div className={editKind ? 'mt-4 grid grid-cols-2 gap-2' : 'mt-4'}>
-          {editKind && (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                onClose();
-                open({ kind: editKind, edit: transaction });
-              }}
-            >
-              Editar
-            </Button>
-          )}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              onClose();
+              open({ kind: editKind, edit: transaction });
+            }}
+          >
+            Editar
+          </Button>
           <ConfirmButton loading={remove.isPending} onConfirm={() => remove.mutate(transaction.id)}>
             Eliminar
           </ConfirmButton>
