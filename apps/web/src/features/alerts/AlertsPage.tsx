@@ -1,3 +1,4 @@
+import type { AlertDTO } from '@finanzas/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -11,16 +12,7 @@ import { AlertItem, StatusSummary } from './AlertItem';
 
 export function AlertsPage() {
   const alerts = useAlerts();
-  const queryClient = useQueryClient();
   const toast = useToast();
-  const dismiss = useMutation<unknown, ApiError, string>({
-    mutationFn: (key) => api.post(`/alerts/${key}/dismiss`),
-    onSuccess: () =>
-      Promise.all(
-        [qk.alerts, qk.dashboard].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-      ),
-    onError: (err) => toast.show({ message: err.message, tone: 'error' }),
-  });
   const restore = useCrudMutation(
     () => api.del('/alerts/dismissed'),
     'Volvimos a mostrar las alertas descartadas',
@@ -40,17 +32,13 @@ export function AlertsPage() {
       ) : (
         <ul className="space-y-2">
           {alerts.data.items.map((a) => (
-            <AlertItem
-              key={a.key}
-              alert={a}
-              dismissing={dismiss.isPending && dismiss.variables === a.key}
-              onDismiss={() => dismiss.mutate(a.key)}
-            />
+            <DismissibleAlert key={a.key} alert={a} />
           ))}
         </ul>
       )}
       <Button
         variant="ghost"
+        requiresNetwork
         loading={restore.isPending}
         onClick={() =>
           restore.mutate(undefined, {
@@ -61,5 +49,22 @@ export function AlertsPage() {
         Mostrar las alertas descartadas
       </Button>
     </div>
+  );
+}
+
+/** Pendiente 1 de la Fase 2: cada fila tiene su propia mutación, así su estado y su error no se pierden. */
+function DismissibleAlert({ alert }: { alert: AlertDTO }) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const dismiss = useMutation<unknown, ApiError, void>({
+    mutationFn: () => api.post(`/alerts/${alert.key}/dismiss`),
+    onSuccess: () =>
+      Promise.all(
+        [qk.alerts, qk.dashboard].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      ),
+    onError: (err) => toast.show({ message: err.message, tone: 'error' }),
+  });
+  return (
+    <AlertItem alert={alert} dismissing={dismiss.isPending} onDismiss={() => dismiss.mutate()} />
   );
 }

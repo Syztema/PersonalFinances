@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import type { Prisma } from '../src/generated/prisma/client';
 import { balanceOf, setupFinances } from './finance-fixtures';
-import { createTestApp, registerUser } from './helpers';
+import { createTestApp, registerUser, type Client } from './helpers';
 
 let app: FastifyInstance;
 const TODAY = '2026-10-20';
@@ -13,6 +14,60 @@ beforeAll(async () => {
 afterAll(async () => {
   await app.close();
 });
+
+/**
+ * Barrera determinista: una transacción cruda (el "mover") bloquea la fila, aplica `mutate` y espera;
+ * la petición arranca y se espera a que Postgres la muestre bloqueada por el mover
+ * (`pg_blocking_pids`). Luego se confirma el mover y se devuelve la respuesta.
+ */
+async function requestBlockedBy<T extends { status: number }>(
+  mutate: (tx: Prisma.TransactionClient) => Promise<unknown>,
+  start: () => Promise<T>,
+  rowId: string,
+  table: 'Goal' | 'Transaction' = 'Goal',
+): Promise<T> {
+  let release!: () => void;
+  let ready!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const readyP = new Promise<void>((resolve) => (ready = resolve));
+  let pid = 0;
+  const mover = app.prisma.$transaction(
+    async (tx) => {
+      if (table === 'Goal') {
+        await tx.$queryRaw`SELECT id FROM "Goal" WHERE id = ${rowId}::uuid FOR UPDATE`;
+      } else {
+        await tx.$queryRaw`SELECT id FROM "Transaction" WHERE id = ${rowId}::uuid FOR UPDATE`;
+      }
+      await mutate(tx);
+      pid = (await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`)[0]!.pid;
+      ready();
+      await held;
+    },
+    { timeout: 30_000 },
+  );
+  await Promise.race([readyP, mover]);
+  const request = start();
+  let settled = false;
+  void request.then(
+    () => (settled = true),
+    () => (settled = true),
+  );
+  try {
+    let waiting = 0;
+    for (let i = 0; i < 200 && waiting === 0; i++) {
+      const rows = await app.prisma.$queryRaw<Array<{ n: bigint }>>`
+        SELECT count(*) AS n FROM pg_stat_activity WHERE ${pid}::int = ANY(pg_blocking_pids(pid))`;
+      waiting = Number(rows[0]?.n ?? 0);
+      if (waiting === 0) await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(waiting).toBeGreaterThan(0);
+    expect(settled).toBe(false);
+  } finally {
+    release();
+    await mover;
+  }
+  return request;
+}
 
 async function newUser() {
   const { api } = await registerUser(app);
@@ -232,5 +287,304 @@ describe('goals fix round 1', () => {
     const moved = await api.put(`/api/goals/${goal.id}`, { accountId: other });
     expect(moved.status).toBe(409);
     expect(moved.body.error.code).toBe('GOAL_HAS_MOVEMENTS');
+  });
+});
+
+describe('goals never go below zero (spec Fase 3 §8.2)', () => {
+  const NEGATIVE = {
+    code: 'WITHDRAWAL_EXCEEDS_GOAL',
+    message: 'Revisa los datos ingresados.',
+    fields: { amount: 'No puedes retirar más de lo ahorrado en esta meta' },
+  };
+  const progressOf = async (api: Client, id: string) =>
+    (await api.get(`/api/goals/${id}`)).body.goal.progress as number;
+
+  it('two simultaneous withdrawals cannot take more than the goal holds', async () => {
+    const { api, f, goal } = await newUser(); // avance 1.000.000
+    const body = { toAccountId: f.bank, amount: 600_000, date: TODAY };
+    const results = await Promise.all([
+      api.post(`/api/goals/${goal.id}/withdrawals`, body),
+      api.post(`/api/goals/${goal.id}/withdrawals`, body),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([201, 400]);
+    expect(results.find((r) => r.status === 400)!.body.error).toEqual(NEGATIVE);
+    expect(await progressOf(api, goal.id)).toBe(400_000);
+  });
+
+  it('a contribution waits for a concurrent account change and never lands in the old account', async () => {
+    const { api, f, goal } = await newUser();
+    const other = (await api.post('/api/accounts', { name: 'CDT', type: 'INVESTMENT' })).body
+      .account.id as string;
+    const res = await requestBlockedBy(
+      (tx) => tx.goal.update({ where: { id: goal.id }, data: { accountId: other } }),
+      () =>
+        api.post(`/api/goals/${goal.id}/contributions`, {
+          fromAccountId: f.bank,
+          amount: 100_000,
+          date: TODAY,
+        }),
+      goal.id,
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toEqual({
+      code: 'INVALID_REFERENCE',
+      message: 'Revisa las cuentas, tarjetas o categorías seleccionadas.',
+      fields: { goalId: 'La transferencia debe entrar o salir de la cuenta de la meta' },
+    });
+    expect(await app.prisma.transaction.count({ where: { goalId: goal.id } })).toBe(0);
+  });
+
+  it.each(['delete', 'edit'] as const)(
+    'a stale %s of a movement whose goal changed meanwhile answers 409 and leaves the new goal intact',
+    async (kind) => {
+      const { api, f } = await newUser();
+      const goalB = (
+        await api.post('/api/goals', {
+          name: 'Viaje',
+          targetAmount: 3_000_000,
+          accountId: f.savings,
+        })
+      ).body.goal;
+      const m = (
+        await api.post('/api/transactions', {
+          type: 'TRANSFER',
+          amount: 500_000,
+          date: TODAY,
+          accountId: f.bank,
+          toAccountId: f.savings,
+          description: 'Traslado',
+        })
+      ).body.transaction;
+      const res = await requestBlockedBy(
+        (tx) => tx.transaction.update({ where: { id: m.id }, data: { goalId: goalB.id } }),
+        () =>
+          kind === 'delete'
+            ? api.del(`/api/transactions/${m.id}`)
+            : api.put(`/api/transactions/${m.id}`, {
+                type: 'TRANSFER',
+                amount: 100_000,
+                date: TODAY,
+                accountId: f.bank,
+                toAccountId: f.savings,
+                description: 'Traslado',
+              }),
+        m.id,
+        'Transaction',
+      );
+      expect(res.status).toBe(409);
+      expect(res.body.error).toEqual({
+        code: 'CONFLICT_RETRY',
+        message: 'Este movimiento cambió; vuelve a cargarlo.',
+      });
+      const row = await app.prisma.transaction.findUnique({ where: { id: m.id } });
+      expect(row).toMatchObject({ goalId: goalB.id, amount: 500_000n });
+      expect(await progressOf(api, goalB.id)).toBe(500_000);
+    },
+  );
+
+  it('POST /transactions with a goal transfer that would leave it negative answers 400', async () => {
+    const { api, f, goal } = await newUser(); // avance 1.000.000
+    const over = await api.post('/api/transactions', {
+      type: 'TRANSFER',
+      amount: 1_000_001,
+      date: TODAY,
+      accountId: f.savings,
+      toAccountId: f.bank,
+      goalId: goal.id,
+      description: 'Retiro',
+    });
+    expect(over.status).toBe(400);
+    expect(over.body.error).toEqual(NEGATIVE);
+    expect(await progressOf(api, goal.id)).toBe(1_000_000);
+  });
+
+  it('moving a goal transfer to another goal applies the rule to both goals', async () => {
+    const { api, f, goal: a } = await newUser(); // A: inicial 1.000.000
+    const b = (
+      await api.post('/api/goals', { name: 'Viaje', targetAmount: 3_000_000, accountId: f.savings })
+    ).body.goal;
+    const add = (
+      await api.post(`/api/goals/${a.id}/contributions`, {
+        fromAccountId: f.bank,
+        amount: 500_000,
+        date: TODAY,
+      })
+    ).body.transaction;
+    const move = (to: string) =>
+      api.put(`/api/transactions/${add.id}`, {
+        type: 'TRANSFER',
+        amount: 500_000,
+        date: TODAY,
+        accountId: f.bank,
+        toAccountId: f.savings,
+        goalId: to,
+        description: add.description,
+      });
+    await api.post(`/api/goals/${a.id}/withdrawals`, {
+      toAccountId: f.bank,
+      amount: 1_400_000,
+      date: TODAY,
+    }); // A: 100.000
+    const blocked = await move(b.id); // A quedaría en -400.000
+    expect(blocked.status).toBe(400);
+    expect(blocked.body.error).toEqual(NEGATIVE);
+    expect(await progressOf(api, a.id)).toBe(100_000);
+    expect(await progressOf(api, b.id)).toBe(0);
+
+    const { api: api2, f: f2, goal: a2 } = await newUser();
+    const b2 = (
+      await api2.post('/api/goals', {
+        name: 'Viaje',
+        targetAmount: 3_000_000,
+        accountId: f2.savings,
+      })
+    ).body.goal;
+    const add2 = (
+      await api2.post(`/api/goals/${a2.id}/contributions`, {
+        fromAccountId: f2.bank,
+        amount: 500_000,
+        date: TODAY,
+      })
+    ).body.transaction;
+    const ok = await api2.put(`/api/transactions/${add2.id}`, {
+      type: 'TRANSFER',
+      amount: 500_000,
+      date: TODAY,
+      accountId: f2.bank,
+      toAccountId: f2.savings,
+      goalId: b2.id,
+      description: add2.description,
+    });
+    expect(ok.status).toBe(200);
+    expect(await progressOf(api2, a2.id)).toBe(1_000_000);
+    expect(await progressOf(api2, b2.id)).toBe(500_000);
+  });
+
+  it("another user's goalId in /transactions answers 400 and leaves that goal untouched", async () => {
+    const { api, f } = await newUser();
+    const { api: otherApi, goal: theirs } = await newUser();
+    const res = await api.post('/api/transactions', {
+      type: 'TRANSFER',
+      amount: 100_000,
+      date: TODAY,
+      accountId: f.bank,
+      toAccountId: f.savings,
+      goalId: theirs.id,
+      description: 'Ajeno',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_REFERENCE');
+    expect(await progressOf(otherApi, theirs.id)).toBe(1_000_000);
+  });
+
+  it('editing a withdrawal above what the goal holds answers 400 on "amount"', async () => {
+    const { api, f, goal } = await newUser(); // avance 1.000.000
+    const out = (
+      await api.post(`/api/goals/${goal.id}/withdrawals`, {
+        toAccountId: f.bank,
+        amount: 300_000,
+        date: TODAY,
+      })
+    ).body.transaction;
+    const edit = (amount: number) =>
+      api.put(`/api/transactions/${out.id}`, {
+        type: 'TRANSFER',
+        amount,
+        date: TODAY,
+        accountId: f.savings,
+        toAccountId: f.bank,
+        goalId: goal.id,
+        description: out.description,
+      });
+    const over = await edit(1_000_001);
+    expect(over.status).toBe(400);
+    expect(over.body.error).toEqual(NEGATIVE);
+    expect(await progressOf(api, goal.id)).toBe(700_000);
+    const exact = await edit(1_000_000);
+    expect(exact.status).toBe(200);
+    expect(await progressOf(api, goal.id)).toBe(0);
+  });
+
+  it('editing a contribution down cannot leave the goal negative', async () => {
+    const { api, f, goal } = await newUser(); // avance 1.000.000
+    const add = (
+      await api.post(`/api/goals/${goal.id}/contributions`, {
+        fromAccountId: f.bank,
+        amount: 500_000,
+        date: TODAY,
+      })
+    ).body.transaction;
+    await api.post(`/api/goals/${goal.id}/withdrawals`, {
+      toAccountId: f.bank,
+      amount: 1_400_000,
+      date: TODAY,
+    }); // avance 100.000
+    const edit = (amount: number) =>
+      api.put(`/api/transactions/${add.id}`, {
+        type: 'TRANSFER',
+        amount,
+        date: TODAY,
+        accountId: f.bank,
+        toAccountId: f.savings,
+        goalId: goal.id,
+        description: add.description,
+      });
+    const under = await edit(300_000);
+    expect(under.status).toBe(400);
+    expect(under.body.error).toEqual(NEGATIVE);
+    expect((await edit(400_000)).status).toBe(200);
+    expect(await progressOf(api, goal.id)).toBe(0);
+  });
+
+  it('deleting a contribution that leaves the goal negative answers 409', async () => {
+    const { api, f, goal } = await newUser(); // avance 1.000.000
+    const add = (
+      await api.post(`/api/goals/${goal.id}/contributions`, {
+        fromAccountId: f.bank,
+        amount: 500_000,
+        date: TODAY,
+      })
+    ).body.transaction;
+    const out = (
+      await api.post(`/api/goals/${goal.id}/withdrawals`, {
+        toAccountId: f.bank,
+        amount: 1_400_000,
+        date: TODAY,
+      })
+    ).body.transaction; // avance 100.000
+
+    const blocked = await api.del(`/api/transactions/${add.id}`);
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error).toEqual({
+      code: 'GOAL_PROGRESS_NEGATIVE',
+      message: 'Esta meta quedaría con saldo negativo; ajusta primero sus retiros.',
+    });
+    expect((await api.get(`/api/transactions/${add.id}`)).status).toBe(200);
+    expect(await progressOf(api, goal.id)).toBe(100_000);
+
+    // Primero el retiro y después el abono: ambos se pueden eliminar.
+    expect((await api.del(`/api/transactions/${out.id}`)).status).toBe(204);
+    expect(await progressOf(api, goal.id)).toBe(1_500_000);
+    expect((await api.del(`/api/transactions/${add.id}`)).status).toBe(204);
+    expect(await progressOf(api, goal.id)).toBe(1_000_000);
+  });
+
+  it('lowering the initial amount below the withdrawals answers 400 on "initialAmount"', async () => {
+    const { api, f, goal } = await newUser(); // inicial 1.000.000
+    await api.post(`/api/goals/${goal.id}/withdrawals`, {
+      toAccountId: f.bank,
+      amount: 300_000,
+      date: TODAY,
+    }); // avance 700.000
+    const low = await api.put(`/api/goals/${goal.id}`, { initialAmount: 200_000 });
+    expect(low.status).toBe(400);
+    expect(low.body.error).toEqual({
+      code: 'WITHDRAWAL_EXCEEDS_GOAL',
+      message: 'Revisa los datos ingresados.',
+      fields: { initialAmount: 'La meta quedaría con saldo negativo' },
+    });
+    const ok = await api.put(`/api/goals/${goal.id}`, { initialAmount: 300_000 });
+    expect(ok.status).toBe(200);
+    expect(ok.body.goal.progress).toBe(0);
   });
 });

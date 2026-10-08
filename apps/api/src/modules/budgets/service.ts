@@ -8,6 +8,7 @@ import {
   type BudgetLineDTO,
   type BudgetPutInput,
   type IsoDate,
+  type ReportDTO,
 } from '@finanzas/shared';
 import { budgetProjection, usageOf } from '../../domain/budget';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client';
@@ -82,16 +83,40 @@ async function copyPrevious(
   return true;
 }
 
-export async function computeBudget(
+export interface ComputeBudgetOptions {
+  /** false: solo lectura, nunca copia del mes anterior (reportes, spec Fase 3 §3.2.7). */
+  copy?: boolean;
+}
+
+export function computeBudget(
   db: PrismaClient,
   auth: AuthContext,
   month: string,
+  options?: { copy?: true },
+): Promise<BudgetComputation>;
+export function computeBudget(
+  db: DbClient,
+  auth: AuthContext,
+  month: string,
+  options: { copy: false },
+): Promise<BudgetComputation>;
+export async function computeBudget(
+  db: DbClient,
+  auth: AuthContext,
+  month: string,
+  options: ComputeBudgetOptions = {},
 ): Promise<BudgetComputation> {
   const { userId, today } = auth;
   const monthStart = monthStartFromKey(month);
   const monthEnd = endOfMonth(monthStart);
   let row = await loadRow(db, userId, monthStart);
-  if (!row && monthStart >= startOfMonth(today) && (await copyPrevious(db, userId, monthStart))) {
+  if (
+    !row &&
+    options.copy !== false &&
+    monthStart >= startOfMonth(today) &&
+    // Las sobrecargas garantizan un PrismaClient cuando se permite copiar.
+    (await copyPrevious(db as PrismaClient, userId, monthStart))
+  ) {
     row = await loadRow(db, userId, monthStart);
   }
   const isCurrent = monthStart === startOfMonth(today);
@@ -179,6 +204,53 @@ export async function computeBudget(
     },
     scope,
   };
+}
+
+/**
+ * Spec Fase 3 §3.2.7: presupuesto vs. gasto de cada mes, de solo lectura (nunca copia). Con
+ * presupuesto, `spent` usa su alcance (plan Fase 2, decisión 1); sin presupuesto, todo el gasto
+ * del mes calendario. `lines` es el detalle del último mes.
+ */
+export async function budgetVsSpend(
+  db: DbClient,
+  auth: AuthContext,
+  months: string[],
+): Promise<ReportDTO['budget']> {
+  const result: ReportDTO['budget'] = { months: [], lines: [] };
+  if (months.length === 0) return result;
+  const spendRows = await db.transaction.groupBy({
+    by: ['date'],
+    where: {
+      userId: auth.userId,
+      type: { in: ['EXPENSE', 'CARD_PURCHASE'] },
+      date: {
+        gte: toDbDate(monthStartFromKey(months[0]!)),
+        lte: toDbDate(endOfMonth(monthStartFromKey(months[months.length - 1]!))),
+      },
+    },
+    _sum: { amount: true },
+  });
+  const spentByMonth = new Map<string, number>();
+  for (const r of spendRows) {
+    const key = monthKey(fromDbDate(r.date));
+    spentByMonth.set(key, (spentByMonth.get(key) ?? 0) + num(r._sum.amount));
+  }
+  for (const [i, month] of months.entries()) {
+    const { dto } = await computeBudget(db, auth, month, { copy: false });
+    result.months.push({
+      month,
+      budget: dto.total?.budget ?? null,
+      spent: dto.total?.spent ?? spentByMonth.get(month) ?? 0,
+    });
+    if (i === months.length - 1) {
+      result.lines = dto.lines.map((l) => ({
+        category: l.category,
+        amount: l.amount,
+        spent: l.spent,
+      }));
+    }
+  }
+  return result;
 }
 
 export async function getBudget(

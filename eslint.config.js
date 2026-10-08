@@ -19,7 +19,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['apps/api/**/*.ts', 'packages/**/*.ts', '*.js', '*.ts'],
+    files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'apps/web/scripts/**/*.mjs', '*.js', '*.ts'],
     languageOptions: { globals: globals.node },
   },
   {
@@ -30,6 +30,10 @@ export default tseslint.config(
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
     },
+  },
+  {
+    files: ['e2e/**/*.{ts,mjs}'],
+    languageOptions: { globals: globals.node },
   },
   {
     files: ['apps/web/public/**/*.js'],

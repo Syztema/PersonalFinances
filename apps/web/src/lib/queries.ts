@@ -8,6 +8,8 @@ import type {
   FinancialSettingsResponse,
   GoalDTO,
   RecurringRuleDTO,
+  ReportDTO,
+  ReportPeriodInput,
   ScheduledItemDTO,
   StatusDTO,
 } from '@finanzas/shared';
@@ -31,6 +33,8 @@ export const qk = {
   budget: (month: string) => ['budgets', month] as const,
   settings: ['settings'] as const,
   alerts: ['alerts'] as const,
+  reports: ['reports'] as const,
+  report: (period: ReportPeriodInput) => ['reports', period] as const,
 };
 
 /** Después de cualquier cambio de dinero o de planificación, todo lo calculado puede cambiar. */
@@ -51,6 +55,7 @@ export function invalidateFinance(queryClient: QueryClient) {
       qk.budgets,
       qk.settings,
       qk.alerts,
+      qk.reports,
     ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
   );
 }
@@ -93,4 +98,19 @@ export const useAlerts = () =>
   useQuery({
     queryKey: qk.alerts,
     queryFn: () => api.get<{ items: AlertDTO[]; status: StatusDTO }>('/alerts'),
+  });
+
+/** Query string del periodo para /api/reports y su exportación (nunca va en la URL del navegador). */
+export function reportParams(period: ReportPeriodInput): string {
+  return new URLSearchParams(
+    'preset' in period ? { preset: period.preset } : { from: period.from, to: period.to },
+  ).toString();
+}
+
+/** Spec Fase 3 §5.1: llave `['reports', periodo]`; al cambiar de periodo se conserva el anterior como placeholder. */
+export const useReport = (period: ReportPeriodInput) =>
+  useQuery({
+    queryKey: qk.report(period),
+    queryFn: () => api.get<ReportDTO>(`/reports?${reportParams(period)}`),
+    placeholderData: keepPreviousData,
   });

@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   Bell,
+  ChartColumn,
   ChartPie,
   CreditCard,
   House,
@@ -28,7 +29,9 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: '/more', label: 'Más', icon: Menu },
 ];
 
+/** Reportes va primero: es la primera opción de "Más" y, en la barra lateral, sigue a Presupuestos. */
 export const SECONDARY_NAV: NavItem[] = [
+  { to: '/reports', label: 'Reportes', icon: ChartColumn },
   { to: '/accounts', label: 'Mis cuentas', icon: Wallet },
   { to: '/cards', label: 'Tarjetas', icon: CreditCard },
   { to: '/debts', label: 'Préstamos', icon: Landmark },

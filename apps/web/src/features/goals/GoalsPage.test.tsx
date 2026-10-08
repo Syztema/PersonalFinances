@@ -217,7 +217,7 @@ describe('GoalsPage (spec 8.10)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Eliminar meta' }));
     expect(deleted).toBe(0);
     await vi.advanceTimersByTimeAsync(500);
-    await userEvent.click(screen.getByRole('button', { name: '¿Seguro? Toca de nuevo' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar: Eliminar meta' }));
     await waitFor(() => expect(deleted).toBe(1));
   });
 
@@ -272,6 +272,34 @@ describe('GoalsPage (spec 8.10)', () => {
         },
       ]),
     );
+  });
+
+  it('shows the initial amount error from the server under "Ya tengo ahorrado"', async () => {
+    mockApi({
+      'GET /auth/me': me,
+      'GET /goals': () => ({ status: 200, body: { items: [goal] } }),
+      'GET /accounts': () => ({ status: 200, body: { items: [bank, savings] } }),
+      'PUT /goals/g1': () => ({
+        status: 400,
+        body: {
+          error: {
+            code: 'WITHDRAWAL_EXCEEDS_GOAL',
+            message: 'Revisa los datos ingresados.',
+            fields: { initialAmount: 'La meta quedaría con saldo negativo' },
+          },
+        },
+      }),
+    });
+    renderWithProviders(<GoalsPage />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Editar' }));
+    const initial = await screen.findByLabelText('Ya tengo ahorrado (opcional)');
+    await userEvent.clear(initial);
+    await userEvent.type(initial, '50000');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar meta' }));
+    expect(await screen.findByText('La meta quedaría con saldo negativo')).toBeInTheDocument();
+    expect(initial).toHaveAttribute('aria-invalid', 'true');
+    expect(initial).toHaveAccessibleDescription('La meta quedaría con saldo negativo');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('shows the server message when the account of a goal with movements changes', async () => {

@@ -25,6 +25,24 @@ export function onUnauthorized(listener: UnauthorizedListener) {
 
 const SILENT_401 = new Set(['/auth/login', '/auth/me', '/auth/logout']);
 
+/** Error de red (sin respuesta del servidor), con el mismo mensaje en toda la app. */
+export const networkError = () =>
+  new ApiError(0, 'NETWORK', 'Sin conexión. Revisa tu internet e intenta de nuevo.');
+
+/** Convierte una respuesta de error en `ApiError` y avisa si la sesión dejó de ser válida. */
+export async function apiErrorFrom(res: Response, path: string): Promise<ApiError> {
+  const data: unknown = await res.json().catch(() => null);
+  const error = (data as ApiErrorBody | null)?.error;
+  const apiError = new ApiError(
+    res.status,
+    error?.code ?? 'UNKNOWN',
+    error?.message ?? 'Ocurrió un error inesperado.',
+    error?.fields,
+  );
+  if (res.status === 401 && !SILENT_401.has(path)) unauthorizedListener?.(apiError.code);
+  return apiError;
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
@@ -37,22 +55,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       }),
     });
   } catch {
-    throw new ApiError(0, 'NETWORK', 'Sin conexión. Revisa tu internet e intenta de nuevo.');
+    throw networkError();
   }
   if (res.status === 204) return undefined as T;
-  const data: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    const error = (data as ApiErrorBody | null)?.error;
-    const apiError = new ApiError(
-      res.status,
-      error?.code ?? 'UNKNOWN',
-      error?.message ?? 'Ocurrió un error inesperado.',
-      error?.fields,
-    );
-    if (res.status === 401 && !SILENT_401.has(path)) unauthorizedListener?.(apiError.code);
-    throw apiError;
-  }
-  return data as T;
+  if (!res.ok) throw await apiErrorFrom(res, path);
+  return (await res.json().catch(() => null)) as T;
 }
 
 export const api = {

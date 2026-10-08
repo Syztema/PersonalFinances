@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { ProgressBar } from './ProgressBar';
 
-const bar = (value: number, tone?: 'auto' | 'positive') => {
+const bar = (value: number, tone?: 'auto' | 'positive' | 'neutral') => {
   render(<ProgressBar value={value} label="Uso" tone={tone} />);
   return screen.getByRole('progressbar', { name: 'Uso' });
 };
@@ -25,5 +25,8 @@ describe('ProgressBar', () => {
   });
   it('goals always look positive', () => {
     expect(bar(0.95, 'positive').firstElementChild).toHaveClass('bg-positive');
+  });
+  it('keeps the normal color at any value with the neutral tone', () => {
+    expect(bar(1.2, 'neutral').firstElementChild).toHaveClass('bg-primary');
   });
 });

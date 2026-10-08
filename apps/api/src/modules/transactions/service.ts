@@ -18,6 +18,15 @@ import { accountBalance } from '../accounts/service';
 import { findSystemCategory } from '../categories/service';
 import { cardDebt } from '../credit-cards/service';
 import { loanBalance } from '../debts/service';
+import {
+  assertGoalAccount,
+  assertGoalsNotNegative,
+  goalProgressNegative,
+  lockGoals,
+  relockMovement,
+  withdrawalExceedsGoal,
+  type LockedGoal,
+} from '../goals/guard';
 import { applyLink, prepareLink } from '../scheduled/link';
 import { toTransactionDTO, transactionInclude } from './mapper';
 import { resolveRefs, type ResolveOptions, type ResolvedRefs } from './refs';
@@ -67,6 +76,17 @@ export function rowData(input: TransactionInput) {
     case 'DEBT_PAYMENT':
     case 'DEBT_DISBURSEMENT':
       return { ...common, debtId: input.debtId, accountId: input.accountId };
+  }
+}
+
+/** Meta de una transferencia (abono o retiro); los demás tipos no tienen. */
+const goalIdOf = (input: TransactionInput) =>
+  input.type === 'TRANSFER' ? (input.goalId ?? null) : null;
+
+/** Con la meta bloqueada, revisa que la transferencia siga entrando o saliendo de su cuenta. */
+function checkLockedGoal(goals: Map<string, LockedGoal>, input: TransactionInput) {
+  if (input.type === 'TRANSFER' && input.goalId) {
+    assertGoalAccount(goals, input.goalId, input.accountId, input.toAccountId);
   }
 }
 
@@ -326,8 +346,12 @@ export async function createTransaction(
   const link = await prepareLink(db, auth.userId, input, linkFieldsOf(input));
   const name = (input.description ?? p.refs.category?.name ?? 'Recurrente').slice(0, 60);
   const id = await db.$transaction(async (tx) => {
+    // Spec Fase 3 §8.2: la meta queda bloqueada hasta el final; dos retiros a la vez no pasan el tope.
+    const goals = await lockGoals(tx, auth.userId, [goalIdOf(input)]);
+    checkLockedGoal(goals, input);
     const created = await insertTransaction(tx, auth.userId, p);
     await applyLink(tx, auth.userId, created, input, link, name);
+    await assertGoalsNotNegative(tx, auth.userId, goals, withdrawalExceedsGoal);
     return created;
   });
   return transactionResult(db, auth.userId, id, p);
@@ -342,6 +366,7 @@ export async function deleteTransaction(
     where: { id_userId: { id, userId } },
     select: {
       parentId: true,
+      goalId: true,
       account: holder,
       toAccount: holder,
       creditCard: holder,
@@ -357,13 +382,17 @@ export async function deleteTransaction(
   }
   const frozen = deletedHolder(row);
   if (frozen) throw entityDeleted(frozen, 'eliminar este movimiento');
-  await db.$transaction([
-    db.scheduledItem.updateMany({
+  await db.$transaction(async (tx) => {
+    // Spec Fase 3 §8.2: borrar un abono no puede dejar la meta con saldo negativo.
+    const goals = await lockGoals(tx, userId, [row.goalId]);
+    await relockMovement(tx, userId, id, row.goalId);
+    await tx.scheduledItem.updateMany({
       where: { userId, transactionId: id },
       data: { transactionId: null, status: 'PENDING' },
-    }),
-    db.transaction.delete({ where: { id_userId: { id, userId } } }),
-  ]);
+    });
+    await tx.transaction.delete({ where: { id_userId: { id, userId } } });
+    await assertGoalsNotNegative(tx, userId, goals, goalProgressNegative);
+  });
 }
 
 /** Addendum §4: elegir una cuenta o una tarjeta convierte el gasto en compra con tarjeta y viceversa. */
@@ -422,6 +451,10 @@ export async function updateTransaction(
   const interestCategoryId = await interestCategoryFor(db, auth.userId, input);
 
   await db.$transaction(async (tx) => {
+    // Spec Fase 3 §8.2: editar un abono o un retiro revisa la meta de antes y la de ahora.
+    const goals = await lockGoals(tx, auth.userId, [existing.goalId, goalIdOf(input)]);
+    checkLockedGoal(goals, input);
+    await relockMovement(tx, auth.userId, id, existing.goalId);
     const row = await tx.transaction.update({
       where: { id_userId: { id, userId: auth.userId } },
       data: fullRowData(input),
@@ -437,6 +470,7 @@ export async function updateTransaction(
         interestCategoryId,
       );
     }
+    await assertGoalsNotNegative(tx, auth.userId, goals, withdrawalExceedsGoal);
   });
 
   return {

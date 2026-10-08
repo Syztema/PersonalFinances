@@ -23,6 +23,7 @@ export function MorePage() {
       <Button
         variant="secondary"
         size="lg"
+        requiresNetwork
         loading={logout.isPending}
         onClick={() => logout.mutate()}
       >

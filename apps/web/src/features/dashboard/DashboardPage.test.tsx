@@ -321,3 +321,40 @@ describe('SpendingPowerSheet without a budget (final review M2)', () => {
     expect(screen.getByText(/Resultado:/)).toBeInTheDocument();
   });
 });
+
+describe('DashboardPage — Tus últimos 6 meses (spec §5.2)', () => {
+  it('ends with the section and waits until it is on screen to ask for the report', async () => {
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const fetchMock = mockApi({
+      'GET /dashboard': () => ({
+        status: 200,
+        body: {
+          ...base,
+          money: { ...base.money, accounts: [account('a1', 'Bancolombia', 'BANK', 2_500_000)] },
+        },
+      }),
+    });
+    renderWithProviders(
+      <QuickAddProvider>
+        <DashboardPage />
+      </QuickAddProvider>,
+    );
+    const heading = await screen.findByRole('heading', { name: 'Tus últimos 6 meses' });
+    expect(heading.closest('section')?.nextElementSibling).toBeNull();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/reports'))).toBe(
+      false,
+    );
+  });
+
+  it('is not shown to a brand-new user', async () => {
+    renderDashboard({ ...base, money: { ...base.money, total: 0, liquid: 0 } });
+    expect(await screen.findByText('Crea tu primera cuenta')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Tus últimos 6 meses' })).not.toBeInTheDocument();
+  });
+});

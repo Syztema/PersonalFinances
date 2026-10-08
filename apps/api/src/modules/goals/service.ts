@@ -15,35 +15,10 @@ import type { DbClient } from '../../lib/prisma';
 import { accountRefSelect } from '../../lib/selects';
 import type { AuthContext } from '../../types/fastify';
 import { createTransaction } from '../transactions/service';
+import { assertGoalsNotNegative, goalFlows, lockGoals, type GoalFlows } from './guard';
 
 const goalInclude = { account: { select: accountRefSelect } } satisfies Prisma.GoalInclude;
 type GoalRow = Prisma.GoalGetPayload<{ include: typeof goalInclude }>;
-interface GoalFlows {
-  contributed: number;
-  withdrawn: number;
-}
-
-/** Abono = transferencia con goalId que entra a la cuenta de la meta; retiro = la que sale. */
-async function flowsOf(db: DbClient, userId: string, goals: GoalRow[]) {
-  const flows = new Map<string, GoalFlows>(
-    goals.map((g) => [g.id, { contributed: 0, withdrawn: 0 }]),
-  );
-  if (goals.length === 0) return flows;
-  const accountOf = new Map(goals.map((g) => [g.id, g.accountId]));
-  const rows = await db.transaction.groupBy({
-    by: ['goalId', 'toAccountId'],
-    where: { userId, type: 'TRANSFER', goalId: { in: goals.map((g) => g.id) } },
-    _sum: { amount: true },
-  });
-  for (const r of rows) {
-    const f = r.goalId ? flows.get(r.goalId) : undefined;
-    if (!f) continue;
-    if (r.toAccountId === accountOf.get(r.goalId!)) f.contributed += num(r._sum.amount);
-    else f.withdrawn += num(r._sum.amount);
-  }
-  return flows;
-}
-
 function toGoalDTO(g: GoalRow, f: GoalFlows, today: IsoDate): GoalDTO {
   const targetAmount = num(g.targetAmount);
   const initialAmount = num(g.initialAmount);
@@ -86,13 +61,13 @@ export async function listGoals(db: DbClient, auth: AuthContext): Promise<GoalDT
     include: goalInclude,
     orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
   });
-  const flows = await flowsOf(db, auth.userId, goals);
+  const flows = await goalFlows(db, auth.userId, goals);
   return goals.map((g) => toGoalDTO(g, flows.get(g.id)!, auth.today));
 }
 
 export async function getGoal(db: DbClient, auth: AuthContext, id: string): Promise<GoalDTO> {
   const goal = await findGoal(db, auth.userId, id);
-  return toGoalDTO(goal, (await flowsOf(db, auth.userId, [goal])).get(id)!, auth.today);
+  return toGoalDTO(goal, (await goalFlows(db, auth.userId, [goal])).get(id)!, auth.today);
 }
 
 /** Spec 7.3: el dinero de la meta vive en una cuenta de ahorro o inversión (activa y del usuario). */
@@ -138,6 +113,8 @@ export async function updateGoal(
 ): Promise<GoalDTO> {
   const { userId } = auth;
   await db.$transaction(async (tx) => {
+    // Spec Fase 3 §8.2: cambiar la cuenta espera a los abonos y retiros en curso (y viceversa).
+    const locked = await lockGoals(tx, userId, [id]);
     const goal = await findGoal(tx, userId, id);
     if (input.accountId && input.accountId !== goal.accountId) {
       await checkGoalAccount(tx, userId, input.accountId);
@@ -166,6 +143,12 @@ export async function updateGoal(
         status: input.status,
       },
     });
+    // Plan Fase 3A, decisión 15: bajar el saldo inicial tampoco puede dejar la meta en negativo.
+    await assertGoalsNotNegative(tx, userId, locked, () =>
+      badRequest('WITHDRAWAL_EXCEEDS_GOAL', 'Revisa los datos ingresados.', {
+        initialAmount: 'La meta quedaría con saldo negativo',
+      }),
+    );
   });
   return getGoal(db, auth, id);
 }
@@ -173,10 +156,12 @@ export async function updateGoal(
 /** Addendum §3.5: sus abonos y retiros quedan como transferencias normales. */
 export async function deleteGoal(db: PrismaClient, userId: string, id: string): Promise<void> {
   await findGoal(db, userId, id);
-  await db.$transaction([
-    db.transaction.updateMany({ where: { userId, goalId: id }, data: { goalId: null } }),
-    db.goal.delete({ where: { id_userId: { id, userId } } }),
-  ]);
+  await db.$transaction(async (tx) => {
+    // Una meta bloqueada espera a los abonos y retiros en curso, que ya no fallan por la llave foránea.
+    await lockGoals(tx, userId, [id]);
+    await tx.transaction.updateMany({ where: { userId, goalId: id }, data: { goalId: null } });
+    await tx.goal.delete({ where: { id_userId: { id, userId } } });
+  });
 }
 
 export async function contributeToGoal(
@@ -218,12 +203,7 @@ export async function withdrawFromGoal(
       toAccountId: 'Elige una cuenta distinta a la de la meta',
     });
   }
-  const { progress } = await getGoal(db, auth, id);
-  if (input.amount > Math.max(0, progress)) {
-    throw badRequest('WITHDRAWAL_EXCEEDS_GOAL', 'Revisa los datos ingresados.', {
-      amount: 'No puedes retirar más de lo ahorrado en esta meta',
-    });
-  }
+  // El tope (lo ahorrado en la meta) se revisa dentro de la transacción, con la meta bloqueada.
   const result = await createTransaction(db, auth, {
     type: 'TRANSFER',
     amount: input.amount,

@@ -464,3 +464,51 @@ describe('RecurringPage income wording (final review M10)', () => {
     expect(screen.getAllByText(/Esperado desde el/)).toHaveLength(1);
   });
 });
+
+describe('CompleteSheet with a deleted source (Fase 2, pendiente 3)', () => {
+  it('leaves the source empty and required when the account was deleted', async () => {
+    const completed: unknown[] = [];
+    setup({
+      'GET /scheduled': () => ({
+        status: 200,
+        body: { items: [item({ account: { ...accountRef, isActive: false } })] },
+      }),
+      'GET /accounts': () => ({
+        status: 200,
+        body: {
+          items: [
+            { ...account, isActive: false },
+            { ...account, id: 'a2', name: 'Nequi', type: 'DIGITAL_WALLET' },
+          ],
+        },
+      }),
+      'POST /scheduled/s1/complete': (body) => {
+        completed.push(body);
+        return { status: 201, body: { transaction: { id: 't1' }, warnings: [] } };
+      },
+    });
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Pagar Arriendo' }));
+    const select = await screen.findByLabelText('Pagado con');
+    expect(select).toHaveValue('');
+    expect(within(select).queryByRole('option', { name: /Bancolombia/ })).toBeNull();
+    expect(screen.getByText('Bancolombia fue eliminada; elige otra opción.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar pago' }));
+    expect(await screen.findByText('Elige con qué pagaste')).toBeInTheDocument();
+    expect(completed).toEqual([]);
+
+    await userEvent.selectOptions(select, 'account:a2');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar pago' }));
+    await waitFor(() =>
+      expect(completed).toEqual([{ amount: 1_000_000, date: addDays(today, -2), accountId: 'a2' }]),
+    );
+  });
+
+  it('still preselects an active source', async () => {
+    setup();
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Pagar Arriendo' }));
+    expect(await screen.findByLabelText('Pagado con')).toHaveValue('account:a1');
+  });
+});

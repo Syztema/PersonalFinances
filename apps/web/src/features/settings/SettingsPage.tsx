@@ -115,7 +115,7 @@ function SettingsForm({ data }: { data: FinancialSettingsResponse }) {
           <Field
             label="Avisarme si mi disponible baja de"
             htmlFor="low-balance"
-            hint="Genera la alerta de dinero bajo."
+            hint="Con 0 solo se avisa si el disponible queda en negativo."
           >
             <MoneyInput id="low-balance" value={threshold} onChange={setThreshold} />
           </Field>
@@ -140,7 +140,13 @@ function SettingsForm({ data }: { data: FinancialSettingsResponse }) {
               <ProgressBar
                 value={b.target > 0 ? b.actual / b.target : 0}
                 label={b.label}
-                tone={b.key === 'SAVINGS' || b.key === 'INVESTMENT' ? 'positive' : 'auto'}
+                tone={
+                  b.key === 'SAVINGS' || b.key === 'INVESTMENT'
+                    ? 'positive'
+                    : b.key === 'OBLIGATIONS'
+                      ? 'neutral'
+                      : 'auto'
+                }
               />
             </li>
           ))}

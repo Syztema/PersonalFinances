@@ -253,7 +253,9 @@ describe('BudgetsPage (spec 8.9)', () => {
       await screen.findByRole('button', { name: 'Eliminar presupuesto' });
       await userEvent.click(screen.getByRole('button', { name: 'Eliminar presupuesto' }));
       await vi.advanceTimersByTimeAsync(500);
-      await userEvent.click(screen.getByRole('button', { name: '¿Seguro? Toca de nuevo' }));
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Confirmar: Eliminar presupuesto' }),
+      );
       expect(await screen.findByText('No se pudo eliminar')).toBeInTheDocument();
     } finally {
       vi.useRealTimers();

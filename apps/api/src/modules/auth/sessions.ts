@@ -26,9 +26,10 @@ export async function validateSession(db: DbClient, token: string, ttlDays: numb
   }
   let renewed = false;
   if (now - session.lastUsedAt.getTime() > RENEW_AFTER_MS) {
-    // updateMany no falla si un logout simultáneo ya borró la sesión: en ese caso ya no es válida.
+    // updateMany no falla si un logout simultáneo ya borró la sesión, y el filtro de vigencia evita
+    // revivir una que venció entretanto (spec Fase 3 §8.6): 0 filas → ya no es válida.
     const { count } = await db.session.updateMany({
-      where: { id: session.id },
+      where: { id: session.id, expiresAt: { gt: new Date(now) } },
       data: { lastUsedAt: new Date(now), expiresAt: new Date(now + ttlDays * DAY_MS) },
     });
     if (count === 0) return null;

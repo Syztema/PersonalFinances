@@ -9,6 +9,7 @@ import { monthLabel } from '../../lib/format';
 import { qk } from '../../lib/queries';
 import { AccountsCard } from './AccountsCard';
 import { CardsSection } from './CardsSection';
+import { DashboardCharts } from './DashboardCharts';
 import { GoalsSection } from './GoalsSection';
 import { LoansSection } from './LoansSection';
 import { MoneySummaryCard } from './MoneySummaryCard';
@@ -56,6 +57,7 @@ export function DashboardPage() {
           <CardsSection cards={d.cards} />
           <LoansSection loans={d.loans} />
           <GoalsSection goals={d.goals} />
+          <DashboardCharts />
         </>
       )}
     </div>

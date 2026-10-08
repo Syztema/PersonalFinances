@@ -1,6 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { TransactionDTO } from '@finanzas/shared';
+import { todayIn, type TransactionDTO } from '@finanzas/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { demoUser, mockApi, renderWithProviders } from '../../test-utils';
 import { TransactionForm } from './TransactionForm';
@@ -519,8 +519,8 @@ describe('TransactionForm (recurring and links, spec 8.11)', () => {
     expect(posted[0]).not.toHaveProperty('scheduledItemId');
   });
 
-  it('marks an expense as recurring without asking for a link', async () => {
-    const fetchMock = setup(false, suggestions([pending]));
+  it('marks an expense as recurring without asking when no rule covers it', async () => {
+    const fetchMock = setup(false, suggestions([{ ...pending, recurringRuleId: null }]));
     await fillExpense();
     await userEvent.click(screen.getByRole('button', { name: /Más opciones/ }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Recurrente (se repite)' }));
@@ -528,9 +528,10 @@ describe('TransactionForm (recurring and links, spec 8.11)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toMatchObject({ recurring: { frequency: 'MONTHLY' } });
+    expect(screen.queryByRole('button', { name: 'Sí, enlazar' })).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).includes('/scheduled/suggestions')),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('shows nested recurrence errors inside the Recurrente box (ruling A2)', async () => {
@@ -671,7 +672,7 @@ describe('TransactionForm (fix round 1: stale link, focus, hidden errors)', () =
   });
 
   it('a recurring save carries recurring and no scheduledItemId', async () => {
-    setup(false, withItems([pending]));
+    setup(false, withItems([{ ...pending, recurringRuleId: null }]));
     await fill();
     await userEvent.click(screen.getByRole('button', { name: /Más opciones/ }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Recurrente (se repite)' }));
@@ -772,6 +773,106 @@ describe('TransactionForm (fix round 2: answer uses current form state)', () => 
     await userEvent.click(screen.getByRole('button', { name: 'Sí, enlazar' }));
     expect(await screen.findByText('Entre 1 y 48 cuotas')).toBeInTheDocument();
     expect(posted).toHaveLength(0);
+  });
+});
+
+describe('TransactionForm (Fase 3: recurrente que ya existía, pendiente 4)', () => {
+  const today = todayIn('America/Bogota');
+  const ruleItem = {
+    id: 's1',
+    kind: 'EXPENSE',
+    name: 'Arriendo',
+    amount: 1_000_000,
+    dueDate: today,
+    ruleDate: today,
+    status: 'PENDING',
+    category: null,
+    account: null,
+    creditCard: null,
+    recurringRuleId: 'r1',
+    transactionId: null,
+    derived: null,
+    sourceId: null,
+  };
+  const oneOff = { ...ruleItem, id: 's2', name: 'Arreglo del techo', recurringRuleId: null };
+  const expense = {
+    type: 'EXPENSE',
+    amount: 1_000_000,
+    date: today,
+    categoryId: 'k1',
+    description: null,
+    notes: null,
+    tags: [],
+    accountId: 'a1',
+    paymentMethod: null,
+  };
+
+  /** Llena un gasto, marca "Recurrente" y toca Guardar; `null` simula que las sugerencias fallan. */
+  async function saveRecurring(items: unknown[] | null) {
+    const fetchMock = setup(false, {
+      'GET /scheduled/suggestions': () =>
+        items === null
+          ? { status: 500, body: { error: { code: 'INTERNAL', message: 'Error' } } }
+          : { status: 200, body: { items } },
+    });
+    renderWithProviders(<TransactionForm mode="expense" onDone={() => undefined} />);
+    await userEvent.type(await screen.findByLabelText('Valor'), '1000000');
+    await userEvent.click(screen.getByRole('radio', { name: /Alimentación/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Más opciones/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Recurrente (se repite)' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    return fetchMock;
+  }
+
+  it('asks about the existing rule and links the occurrence without creating a rule', async () => {
+    await saveRecurring([ruleItem]);
+    const yes = await screen.findByRole('button', { name: 'Sí, enlazar' });
+    expect(screen.getByRole('status', { name: 'Sugerencia de enlace' })).toHaveTextContent(
+      'Ya tienes «Arriendo» como recurrente. ¿Es este pago?',
+    );
+    await waitFor(() => expect(yes).toHaveFocus());
+    await userEvent.click(yes);
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted).toEqual([{ ...expense, scheduledItemId: 's1' }]);
+  });
+
+  it('creates the new rule, without scheduledItemId, when the answer is No', async () => {
+    await saveRecurring([ruleItem]);
+    await userEvent.click(await screen.findByRole('button', { name: 'No, es otro' }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted).toEqual([{ ...expense, recurring: { frequency: 'MONTHLY' } }]);
+  });
+
+  it('builds the rule with the frequency chosen while the question is up', async () => {
+    await saveRecurring([ruleItem]);
+    await screen.findByRole('button', { name: 'Sí, enlazar' });
+    await userEvent.selectOptions(screen.getByLabelText('Frecuencia'), 'WEEKLY');
+    await userEvent.click(screen.getByRole('button', { name: 'No, es otro' }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted).toEqual([{ ...expense, recurring: { frequency: 'WEEKLY' } }]);
+  });
+
+  it('asks about the rule occurrence even when a one-off comes first', async () => {
+    await saveRecurring([oneOff, ruleItem]);
+    expect(await screen.findByRole('status', { name: 'Sugerencia de enlace' })).toHaveTextContent(
+      'Ya tienes «Arriendo» como recurrente.',
+    );
+  });
+
+  it('ignores suggestions that do not belong to a rule and creates the rule', async () => {
+    const fetchMock = await saveRecurring([oneOff]);
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted).toEqual([{ ...expense, recurring: { frequency: 'MONTHLY' } }]);
+    expect(screen.queryByRole('button', { name: 'Sí, enlazar' })).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).includes('/scheduled/suggestions')),
+    ).toHaveLength(1);
+  });
+
+  it('creates the rule when the suggestions request fails', async () => {
+    await saveRecurring(null);
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted).toEqual([{ ...expense, recurring: { frequency: 'MONTHLY' } }]);
   });
 });
 

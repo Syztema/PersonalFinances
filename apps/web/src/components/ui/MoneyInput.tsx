@@ -1,7 +1,7 @@
 import { formatCOP, MAX_AMOUNT, parseCOP } from '@finanzas/shared';
 import type { InputHTMLAttributes } from 'react';
 import { cn } from '../../lib/cn';
-import { inputClass } from './Field';
+import { inputClass, useFieldControl } from './Field';
 
 interface MoneyInputProps extends Omit<
   InputHTMLAttributes<HTMLInputElement>,
@@ -13,8 +13,10 @@ interface MoneyInputProps extends Omit<
 }
 
 export function MoneyInput({ value, onChange, size = 'md', className, ...props }: MoneyInputProps) {
+  const link = useFieldControl(props.id);
   return (
     <input
+      {...link}
       {...props}
       inputMode="numeric"
       autoComplete="off"

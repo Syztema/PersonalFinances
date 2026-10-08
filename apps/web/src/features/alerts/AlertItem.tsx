@@ -2,6 +2,7 @@ import type { AlertDTO, AlertLevel, StatusDTO } from '@finanzas/shared';
 import { Info, OctagonAlert, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router';
 import { cn } from '../../lib/cn';
+import { useOnline } from '../../lib/useOnline';
 
 const LEVELS: Record<AlertLevel, { icon: LucideIcon; className: string; label: string }> = {
   DANGER: { icon: OctagonAlert, className: 'text-negative', label: 'Urgente' },
@@ -9,6 +10,7 @@ const LEVELS: Record<AlertLevel, { icon: LucideIcon; className: string; label: s
   INFO: { icon: Info, className: 'text-primary', label: 'Información' },
 };
 
+/** Sin red, "Descartar" se deshabilita: descartar es un guardado (spec Fase 3 §6). */
 export function AlertItem({
   alert,
   onDismiss,
@@ -18,6 +20,7 @@ export function AlertItem({
   onDismiss?: () => void;
   dismissing?: boolean;
 }) {
+  const online = useOnline();
   const level = LEVELS[alert.level];
   const IconComponent = level.icon;
   return (
@@ -45,7 +48,7 @@ export function AlertItem({
               <button
                 type="button"
                 onClick={onDismiss}
-                disabled={dismissing}
+                disabled={dismissing || !online}
                 aria-busy={dismissing || undefined}
                 aria-label={`Descartar: ${alert.title}`}
                 className="inline-flex min-h-11 items-center text-sm text-muted disabled:opacity-50"

@@ -11,6 +11,7 @@ import { qk } from '../../lib/queries';
 import { useLogout, useMe } from '../auth/useAuth';
 import { DeleteAccountCard } from './DeleteAccountCard';
 import { EmailCard } from './EmailCard';
+import { InstallCard } from './InstallCard';
 import { ThemeCard } from './ThemeCard';
 
 export function ProfilePage() {
@@ -63,6 +64,7 @@ function ProfileContent({ user }: { user: UserDTO }) {
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Perfil y seguridad</h1>
       <ThemeCard user={user} />
+      <InstallCard />
       <Card>
         <CardTitle>Tus datos</CardTitle>
         <form
@@ -149,6 +151,7 @@ function ProfileContent({ user }: { user: UserDTO }) {
       <Button
         variant="secondary"
         size="lg"
+        requiresNetwork
         loading={logout.isPending}
         onClick={() => logout.mutate()}
       >

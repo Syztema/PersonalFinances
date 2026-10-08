@@ -1,4 +1,4 @@
-import { monthKey, type DashboardDTO } from '@finanzas/shared';
+import { monthKey, roundShare, type DashboardDTO } from '@finanzas/shared';
 import { summarizeDebts } from '../../domain/balances';
 import type { PrismaClient } from '../../generated/prisma/client';
 import type { AuthContext } from '../../types/fastify';
@@ -30,7 +30,8 @@ export async function getDashboard(db: PrismaClient, auth: AuthContext): Promise
     netWorth: snap.money.total - debts.total,
     thisMonth: {
       ...snap.flows,
-      savingsRate: snap.flows.income > 0 ? snap.flows.savings / snap.flows.income : null,
+      savingsRate:
+        snap.flows.income > 0 ? roundShare(snap.flows.savings / snap.flows.income) : null,
       savingsTargetPct: snap.config.savingsPct,
     },
     cards: snap.cards.filter((c) => c.isActive),

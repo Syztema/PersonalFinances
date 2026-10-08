@@ -1,6 +1,9 @@
 import { cn } from '../../lib/cn';
 
-/** Barra de avance: ámbar desde 75 %, roja desde 90 % (addendum §6.2); las metas siempre en verde. */
+/**
+ * Barra de avance: ámbar desde 75 %, roja desde 90 % (addendum §6.2); las metas siempre en verde.
+ * `neutral`: siempre el color normal, para objetivos donde llegar al 100 % no es un error.
+ */
 export function ProgressBar({
   value,
   label,
@@ -8,17 +11,19 @@ export function ProgressBar({
 }: {
   value: number;
   label: string;
-  tone?: 'auto' | 'positive';
+  tone?: 'auto' | 'positive' | 'neutral';
 }) {
   const pct = Math.max(0, Math.round(value * 100));
   const color =
     tone === 'positive'
       ? 'bg-positive'
-      : value >= 0.9
-        ? 'bg-negative'
-        : value >= 0.75
-          ? 'bg-warning'
-          : 'bg-primary';
+      : tone === 'neutral'
+        ? 'bg-primary'
+        : value >= 0.9
+          ? 'bg-negative'
+          : value >= 0.75
+            ? 'bg-warning'
+            : 'bg-primary';
   return (
     <div
       role="progressbar"

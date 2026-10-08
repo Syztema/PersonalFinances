@@ -37,6 +37,7 @@ export function DeletedSection<T extends { id: string; name: string }>({
                 <Button
                   size="sm"
                   variant="secondary"
+                  requiresNetwork
                   aria-label={`Restaurar ${item.name}`}
                   loading={isRestoring(item.id)}
                   onClick={() => onRestore(item)}

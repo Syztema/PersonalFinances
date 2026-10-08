@@ -4,7 +4,8 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "e2e"
   ],
   "engines": {
     "node": ">=22.12"
@@ -18,7 +19,9 @@
     "format:check": "prettier --check .",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present"
+    "build": "npm run build --workspaces --if-present",
+    "e2e": "node e2e/scripts/run.mjs",
+    "e2e:down": "node e2e/scripts/run.mjs --down"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

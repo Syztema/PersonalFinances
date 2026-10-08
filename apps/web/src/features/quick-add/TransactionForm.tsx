@@ -49,19 +49,19 @@ const sourceKey = (s: Source) => `${s.kind}:${s.id}`;
 const RECURRING_ERRORS = ['recurring', 'recurring.day1', 'recurring.day2', 'recurring.endDate'];
 const RECURRING_FIELDS = ['interval', 'recurring.intervalDays', ...RECURRING_ERRORS];
 
-/** Spec 8.11: ocurrencia pendiente de la misma categoría, ±20 % del valor y ±7 días. */
-async function findSuggestion(
+/** Spec 8.11: ocurrencias pendientes de la misma categoría, ±20 % del valor y ±7 días. */
+async function findSuggestions(
   kind: 'INCOME' | 'EXPENSE',
   categoryId: string,
   amount: number,
   date: string,
-): Promise<ScheduledItemDTO | null> {
+): Promise<ScheduledItemDTO[]> {
   const params = new URLSearchParams({ kind, categoryId, amount: String(amount), date });
   try {
     const result = await api.get<{ items: ScheduledItemDTO[] }>(`/scheduled/suggestions?${params}`);
-    return result.items[0] ?? null;
+    return result.items;
   } catch {
-    return null; // sin sugerencia: se guarda normal
+    return []; // sin sugerencias: se guarda normal (o se crea la regla)
   }
 }
 
@@ -283,10 +283,16 @@ export function TransactionForm({ mode, preferCard, presetCardId, edit, onDone }
           };
   };
 
+  /** Con "Recurrente" marcado, el cuerpo lleva la regla nueva (con la frecuencia que se ve ahora). */
+  const withRecurrence = (body: Record<string, unknown>) =>
+    repeat ? { ...body, recurring: recurrencePayload(frequency, date, intervalDays) } : body;
+
+  /** Sí → se enlaza la ocurrencia, nunca con `recurring`; No → se guarda normal o se crea la regla. */
   const answer = (scheduledItemId: string | null) => {
     const body = build();
-    if (body) send(body, scheduledItemId);
-    else setSuggestion(null);
+    if (!body) setSuggestion(null);
+    else if (scheduledItemId) send(body, scheduledItemId);
+    else send(withRecurrence(body), null);
   };
 
   const submit = async () => {
@@ -294,16 +300,16 @@ export function TransactionForm({ mode, preferCard, presetCardId, edit, onDone }
     const body = build();
     if (!body || !amount || !categoryId) return;
     if (edit) return send(body, null);
-    if (repeat)
-      return send({ ...body, recurring: recurrencePayload(frequency, date, intervalDays) }, null);
 
     checkingRef.current = true;
     setChecking(true);
-    const found = await findSuggestion(kind, categoryId, amount, date);
+    const items = await findSuggestions(kind, categoryId, amount, date);
     checkingRef.current = false;
     setChecking(false);
+    // Fase 3, pendiente 4: con "Recurrente" solo cuenta una ocurrencia de una regla que ya existe.
+    const found = repeat ? items.find((i) => i.recurringRuleId !== null) : items[0];
     if (found) setSuggestion({ item: found });
-    else send(body, null);
+    else send(withRecurrence(body), null);
   };
 
   return (
@@ -558,14 +564,23 @@ export function TransactionForm({ mode, preferCard, presetCardId, edit, onDone }
               aria-label="Sugerencia de enlace"
               className="space-y-2 rounded-2xl bg-surface-2 p-3"
             >
-              <p className="text-sm">
-                {kind === 'INCOME' ? '¿Es el ingreso esperado ' : '¿Es el pago de '}
-                <strong>{suggestion.item.name}</strong> ({formatCOP(suggestion.item.amount)},{' '}
-                {formatShortDate(suggestion.item.dueDate)})?
-              </p>
+              {repeat ? (
+                <p className="text-sm">
+                  Ya tienes «<strong>{suggestion.item.name}</strong>» como recurrente. ¿Es este{' '}
+                  {kind === 'INCOME' ? 'ingreso' : 'pago'}?
+                </p>
+              ) : (
+                <p className="text-sm">
+                  {kind === 'INCOME' ? '¿Es el ingreso esperado ' : '¿Es el pago de '}
+                  <strong>{suggestion.item.name}</strong> ({formatCOP(suggestion.item.amount)},{' '}
+                  {formatShortDate(suggestion.item.dueDate)})?
+                </p>
+              )}
               <div ref={yesRef} className="grid grid-cols-2 gap-2">
-                <Button onClick={() => answer(suggestion.item.id)}>Sí, enlazar</Button>
-                <Button variant="secondary" onClick={() => answer(null)}>
+                <Button requiresNetwork onClick={() => answer(suggestion.item.id)}>
+                  Sí, enlazar
+                </Button>
+                <Button variant="secondary" requiresNetwork onClick={() => answer(null)}>
                   No, es otro
                 </Button>
               </div>

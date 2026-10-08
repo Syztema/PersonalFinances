@@ -21,7 +21,7 @@ Aplicación web para controlar finanzas personales en **pesos colombianos (COP)*
 | Pago de préstamo (capital)       | −                   | −     | —             |
 | Desembolso de préstamo           | +                   | +     | —             |
 
-- Dashboard: cuánto puedo gastar hoy (con su desglose), dinero total, disponible estimado, deudas y patrimonio, estado general con las alertas principales, balance del mes con el uso del presupuesto, cuentas, tarjetas, préstamos y metas.
+- Dashboard: cuánto puedo gastar hoy (con su desglose), dinero total, disponible estimado, deudas y patrimonio, estado general con las alertas principales, balance del mes con el uso del presupuesto, cuentas, tarjetas, préstamos y metas. Al final, "Tus últimos 6 meses" con ingresos vs. gastos, gastos por categoría y evolución del ahorro (se cargan al llegar a esa parte).
 - Historial con búsqueda, filtros (fecha, tipo, cuenta, tarjeta, categoría, etiqueta, método, valor) y paginación.
 - **¿Cuánto puedo gastar hoy?**: una cifra diaria que respeta tus próximos pagos (obligaciones, tarjetas y cuotas), el ahorro que te propones y el presupuesto, con su desglose.
 - Presupuestos mensuales (general y por categoría) con proyección y alertas al 50, 75, 90 y 100 %; se copian del mes anterior.
@@ -31,6 +31,10 @@ Aplicación web para controlar finanzas personales en **pesos colombianos (COP)*
 - Porcentajes objetivo de obligaciones, ahorro, inversión, entretenimiento y otros.
 - Todo editable o eliminable: eliminar conserva el historial (sección "Eliminados" con Restaurar); cuentas, tarjetas y préstamos se eliminan con saldo $0; ajuste de saldo; eliminar tu cuenta y todos tus datos.
 - Tema oscuro por defecto (claro o según el sistema, en Perfil).
+- **Reportes** (Más → Reportes): este mes, mes anterior, 3, 6 o 12 meses, o fechas propias de hasta 24 meses, con los mismos números del dashboard. Totales y gráficos de ingresos vs. gastos, gastos por categoría y por método de pago, dónde está tu dinero, deuda de tarjetas, evolución del ahorro, evolución mensual (dinero, deudas y patrimonio) y presupuesto vs. gasto. Cada gráfico tiene "Ver tabla".
+- **Exportar** desde Reportes: "Exportar CSV" (los movimientos del periodo, UTF-8 separado por `;`, se abre bien en Excel en español) y "Exportar Excel" (hojas Resumen, Movimientos, Por categoría y Por cuenta). Hasta 20.000 movimientos por archivo (configurable hasta 50.000 con `EXPORT_MAX_ROWS`), 10 exportaciones por minuto y una a la vez por usuario, y como máximo 2 exportaciones a Excel a la vez en el servidor (si hay más, la app pide intentar en un momento); un texto que empieza como fórmula se guarda como texto.
+- **Imprimir o guardar PDF**: el botón de Reportes (o Ctrl+P) arma una hoja A4 con colores claros aunque uses el tema oscuro: periodo, totales, gráficos y tablas de categorías y cuentas. Para el PDF elige "Guardar como PDF" en el diálogo de impresión.
+- **Instalar como app**: en Perfil, "Instalar Finanzas" (Android con Chrome o Edge, y también en el computador con los navegadores que permiten instalarla, como Chrome o Edge); en iPhone o iPad, desde Safari: Compartir → Agregar a inicio. Cuando hay una versión nueva aparece "Nueva versión disponible" con "Actualizar". Sin conexión aparece una franja de aviso y los botones de guardar se desactivan: nada queda en cola para enviarse después.
 - Multiusuario con aislamiento total: cada consulta se filtra por usuario en el backend y la base de datos rechaza referencias entre usuarios.
 
 ## Arquitectura
@@ -56,17 +60,19 @@ Navegador / celular ──HTTPS──► Traefik (Dokploy)
 apps/api        API REST (Fastify 5, Prisma 7, PostgreSQL)
 apps/web        Frontend (React 19, Vite, Tailwind 4)
 packages/shared Esquemas Zod, tipos, formato COP y fechas (compartido)
+e2e/            Pruebas de punta a punta (Playwright + axe) contra el Docker local
 docs/           Diseño y planes de implementación
 ```
 
 ## Tecnologías
 
-Node 22 · TypeScript · Fastify 5 · Prisma 7 (adapter `pg`) · PostgreSQL 17 · Zod 4 · Argon2id · React 19 · Vite 8 · Tailwind CSS 4 · React Router 7 · TanStack Query 5 · Vitest · Docker · Dokploy.
+Node 22 · TypeScript · Fastify 5 · Prisma 7 (adapter `pg`) · PostgreSQL 17 · Zod 4 · Argon2id · exceljs · React 19 · Vite 8 · Tailwind CSS 4 · React Router 7 · TanStack Query 5 · Recharts · vite-plugin-pwa · Vitest · Playwright y axe · Docker · Dokploy.
 
 ## Requisitos
 
 - Node.js 22.12 o superior y npm 10.
 - Docker (para PostgreSQL en desarrollo y para producción).
+- Para `npm run e2e`: el Chromium de Playwright, que se instala una sola vez con `npx playwright install chromium`.
 
 ## Instalación y desarrollo
 
@@ -98,6 +104,7 @@ Desarrollo: `apps/api/.env` (ver `apps/api/.env.example`). Producción: `.env` e
 | `TRUST_PROXY_HOPS`                                  | Proxies delante de la API: 2 en Dokploy (Traefik + nginx).                                                                   |
 | `CORS_ORIGINS`                                      | Solo si el frontend se sirve desde otro dominio.                                                                             |
 | `LOG_LEVEL`                                         | `info` por defecto. Los logs nunca incluyen cuerpos, montos, emails ni query strings.                                        |
+| `EXPORT_MAX_ROWS`                                   | Máximo de movimientos por exportación (20000; hasta 50000). Si el periodo tiene más, la app pide uno más corto.              |
 | `SMTP_*`                                            | Servidor de correo para "Olvidé mi contraseña". Sin SMTP, en desarrollo el enlace aparece en el log de la API.               |
 | `BACKUP_*`                                          | Frecuencia y retención de los backups.                                                                                       |
 
@@ -118,9 +125,22 @@ npm test            # shared + api (unitarias e integración contra Postgres en 
 npm run lint
 npm run typecheck
 npm run build
+npm run check:bundle -w @finanzas/web  # después del build: peso de la carga inicial
+npm run e2e         # punta a punta en Chromium contra Docker (no entra en npm test)
 ```
 
 Las pruebas de integración solo aplican las migraciones (`prisma migrate deploy`) sobre `finanzas_test` y aíslan los datos con usuarios únicos; para vaciar la base reinicia el contenedor: `docker compose -f docker-compose.dev.yml restart db-test`. Incluyen la correctitud financiera (transferir no es gasto, pagar tarjeta no es gasto nuevo, etc.) y el aislamiento entre usuarios.
+
+**Tamaño del bundle.** `check:bundle` lee `apps/web/dist/.vite/manifest.json` y falla si la carga inicial (la entrada, los chunks que importa estáticamente y su CSS) pesa más que la línea base de `apps/web/bundle-baseline.json` + 5 KB en gzip, o si Recharts (chunk `charts`) o el registro del service worker (chunk `pwa`) quedan en ella. La línea base se midió al empezar el plan 3B (la web de la Fase 3). Córrelo después de `npm run build`.
+
+**Punta a punta (`npm run e2e`, carpeta `e2e/`).** Necesita Docker y, una sola vez, `npx playwright install chromium`. El script:
+
+- crea un `.env` temporal si no existe (`APP_URL=http://localhost:8080` y una contraseña de base aleatoria, que se guarda en `e2e/.env.e2e`, ignorado por git, para reutilizarla); si ya tienes `.env`, debe tener `APP_URL=http://localhost:8080` y no `ALLOW_REGISTRATION=false`;
+- levanta el Docker local (`-p finanzas-local`) con build y espera `/api/health`;
+- corre en Chromium, con pantalla de 360 × 800, cinco recorridos con usuarios nuevos: registro y primer gasto, pagar una obligación, reportes y "Exportar Excel", PWA sin conexión, y axe (cero violaciones serias o críticas) en tema claro y oscuro;
+- siempre apaga el stack, sin borrar volúmenes, y borra el `.env` temporal.
+
+Para un solo recorrido: `npm run e2e -- tests/pwa.spec.ts`. El informe queda en `e2e/playwright-report/`. Si abortas una corrida, `npm run e2e:down` apaga el stack y limpia lo temporal. La suite queda muy por debajo del límite de la API (300 solicitudes por minuto por IP): no uses `--repeat-each`. Si la base de `finanzas-local` se creó con otra contraseña (por ejemplo, con un `.env` que ya borraste), restaura ese `.env` o borra el volumen con `docker compose -p finanzas-local -f docker-compose.yml -f docker-compose.local.yml down -v` (borra los datos de esa base local).
 
 ## Docker (local)
 
@@ -131,7 +151,7 @@ docker compose -p finanzas-local -f docker-compose.yml -f docker-compose.local.y
 docker compose -p finanzas-local -f docker-compose.yml -f docker-compose.local.yml down
 ```
 
-Se usa un proyecto de Compose aparte (`finanzas-local`) para no mezclarlo con la base de desarrollo (`finanzas-dev`, `npm run dev:db`).
+Se usa un proyecto de Compose aparte (`finanzas-local`) para no mezclarlo con la base de desarrollo (`finanzas-dev`, `npm run dev:db`). `npm run e2e` usa este mismo proyecto y lo apaga al terminar.
 
 ## Despliegue en Dokploy
 

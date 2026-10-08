@@ -19,7 +19,15 @@ describe('loadConfig', () => {
       corsOrigins: [],
       smtp: null,
       cookieSecure: false,
+      exportMaxRows: 20_000,
     });
+    expect(loadConfig({ ...base, EXPORT_MAX_ROWS: '500' }).exportMaxRows).toBe(500);
+    expect(() => loadConfig({ ...base, EXPORT_MAX_ROWS: '0' })).toThrow(/EXPORT_MAX_ROWS/);
+  });
+
+  it('caps EXPORT_MAX_ROWS at 50000 (review 3A M1: memory grows with each row)', () => {
+    expect(loadConfig({ ...base, EXPORT_MAX_ROWS: '50000' }).exportMaxRows).toBe(50_000);
+    expect(() => loadConfig({ ...base, EXPORT_MAX_ROWS: '50001' })).toThrow(/EXPORT_MAX_ROWS/);
   });
 
   it('treats empty strings as missing and fails on required values', () => {

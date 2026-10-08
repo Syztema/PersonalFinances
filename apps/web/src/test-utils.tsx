@@ -1,14 +1,19 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router';
 import { vi } from 'vitest';
 import { ToastProvider } from './components/ui/Toast';
+import { QUERY_DEFAULTS } from './lib/queryClient';
 
 export function renderWithProviders(ui: ReactElement, { route = '/' }: { route?: string } = {}) {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    defaultOptions: {
+      queries: { retry: false },
+      // Como en la app: las mutaciones nunca esperan a la red (networkMode 'always').
+      mutations: { ...QUERY_DEFAULTS.mutations, retry: false },
+    },
   });
   const result = render(
     <QueryClientProvider client={queryClient}>
@@ -50,9 +55,18 @@ export const demoUser = {
   createdAt: '2026-10-01T00:00:00.000Z',
 };
 
-/** Doble toque de ConfirmButton (exige 400 ms entre toques). Usar con vi.useFakeTimers({ shouldAdvanceTime: true }). */
+/** Doble toque de ConfirmButton (exige 400 ms entre toques; el segundo paso se llama "Confirmar: …"). Usar con vi.useFakeTimers({ shouldAdvanceTime: true }). */
 export async function confirmTwice(name: string) {
   await userEvent.click(screen.getByRole('button', { name }));
   await vi.advanceTimersByTimeAsync(500);
-  await userEvent.click(screen.getByRole('button', { name: '¿Seguro? Toca de nuevo' }));
+  await userEvent.click(screen.getByRole('button', { name: `Confirmar: ${name}` }));
+}
+
+/** Simula la red: `navigator.onLine`, el evento `online`/`offline` y el estado de TanStack Query. */
+export function setOnline(online: boolean) {
+  act(() => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => online });
+    onlineManager.setOnline(online);
+    window.dispatchEvent(new Event(online ? 'online' : 'offline'));
+  });
 }

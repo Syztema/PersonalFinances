@@ -40,6 +40,13 @@ export const appRoutes: RouteObject[] = [
     ),
   },
   {
+    path: '/reports',
+    lazy: page(
+      () => import('../features/reports/ReportsPage'),
+      (m) => m.ReportsPage,
+    ),
+  },
+  {
     path: '/accounts',
     lazy: page(
       () => import('../features/accounts/AccountsPage'),

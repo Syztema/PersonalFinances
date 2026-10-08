@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfirmButton } from './ConfirmButton';
@@ -30,5 +30,34 @@ describe('ConfirmButton', () => {
     await vi.advanceTimersByTimeAsync(500);
     await userEvent.click(screen.getByRole('button'));
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('names and announces the second step (spec §7.1)', async () => {
+    render(<ConfirmButton onConfirm={vi.fn()}>Eliminar meta</ConfirmButton>);
+    await userEvent.click(screen.getByRole('button', { name: 'Eliminar meta' }));
+    expect(screen.getByRole('button', { name: 'Confirmar: Eliminar meta' })).toHaveTextContent(
+      '¿Seguro? Toca de nuevo',
+    );
+    expect(screen.getByText('Confirmar: Eliminar meta')).toHaveAttribute('aria-live', 'polite');
+  });
+
+  it('builds the name from aria-label when there is one', async () => {
+    render(
+      <ConfirmButton aria-label="Eliminar Arriendo" onConfirm={vi.fn()}>
+        Eliminar
+      </ConfirmButton>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Eliminar Arriendo' }));
+    expect(
+      screen.getByRole('button', { name: 'Confirmar: Eliminar Arriendo' }),
+    ).toBeInTheDocument();
+  });
+
+  it('goes back to its first step after 3 seconds and clears the announcement', async () => {
+    render(<ConfirmButton onConfirm={vi.fn()}>Eliminar</ConfirmButton>);
+    await userEvent.click(screen.getByRole('button', { name: 'Eliminar' }));
+    await act(() => vi.advanceTimersByTimeAsync(3100));
+    expect(screen.getByRole('button', { name: 'Eliminar' })).toHaveTextContent('Eliminar');
+    expect(screen.queryByText('Confirmar: Eliminar')).not.toBeInTheDocument();
   });
 });

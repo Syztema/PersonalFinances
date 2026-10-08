@@ -20,6 +20,7 @@ import { settingsRoutes } from './modules/settings/routes';
 import { budgetRoutes } from './modules/budgets/routes';
 import { alertRoutes } from './modules/alerts/routes';
 import { goalRoutes } from './modules/goals/routes';
+import { reportRoutes } from './modules/reports/routes';
 import { setupErrorHandling } from './plugins/errors';
 import { setupSecurity } from './plugins/security';
 import { setupSession } from './plugins/session';
@@ -92,6 +93,7 @@ export async function buildApp(config: AppConfig, deps: AppDeps = {}): Promise<F
       await api.register(budgetRoutes);
       await api.register(goalRoutes);
       await api.register(alertRoutes);
+      await api.register(reportRoutes);
     },
     { prefix: '/api' },
   );

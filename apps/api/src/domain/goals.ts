@@ -9,6 +9,10 @@ export interface GoalProgress {
   weeklyNeeded: number | null;
 }
 
+/** Spec 8.10: progreso = inicial + abonos − retiros (una sola fórmula). */
+export const progressOf = (initialAmount: number, contributed: number, withdrawn: number) =>
+  initialAmount + contributed - withdrawn;
+
 /** Spec 8.10: progreso = inicial + abonos − retiros; necesario = ⌈faltante ÷ max(1, periodos restantes)⌉. */
 export function goalProgress(g: {
   targetAmount: number;
@@ -18,7 +22,7 @@ export function goalProgress(g: {
   targetDate: IsoDate | null;
   today: IsoDate;
 }): GoalProgress {
-  const progress = g.initialAmount + g.contributed - g.withdrawn;
+  const progress = progressOf(g.initialAmount, g.contributed, g.withdrawn);
   const remaining = Math.max(0, g.targetAmount - progress);
   const pct = Math.min(1, Math.max(0, progress) / g.targetAmount);
   if (!g.targetDate) return { progress, pct, remaining, monthlyNeeded: null, weeklyNeeded: null };

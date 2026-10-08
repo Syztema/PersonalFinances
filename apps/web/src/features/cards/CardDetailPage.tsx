@@ -59,7 +59,12 @@ export function CardDetailPage() {
           <p className="text-sm text-muted">
             Esta tarjeta fue eliminada. Su historial se conserva.
           </p>
-          <Button size="sm" loading={isRestoring(card.id)} onClick={() => restore(card.id)}>
+          <Button
+            size="sm"
+            requiresNetwork
+            loading={isRestoring(card.id)}
+            onClick={() => restore(card.id)}
+          >
             Restaurar
           </Button>
         </Card>

@@ -82,6 +82,7 @@ export function GoalsPage() {
                 <Button
                   size="sm"
                   variant="secondary"
+                  requiresNetwork
                   loading={pendingFor(g.id)}
                   onClick={() => changeStatus(g.id, 'ACTIVE')}
                 >
@@ -146,7 +147,7 @@ function GoalCard({
       {goal.pct >= 1 ? (
         <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-positive/10 p-3 text-sm text-positive">
           ¡Llegaste a la meta!
-          <Button size="sm" loading={completing} onClick={onComplete}>
+          <Button size="sm" requiresNetwork loading={completing} onClick={onComplete}>
             Marcar como completada
           </Button>
         </div>

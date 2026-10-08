@@ -71,3 +71,33 @@ describe('SettingsPage', () => {
     );
   });
 });
+
+describe('SettingsPage (Fase 2, pendiente 5)', () => {
+  it('shows the obligations bar in a neutral tone and explains the zero threshold', async () => {
+    mockApi({
+      'GET /auth/me': () => ({ status: 200, body: { user: demoUser } }),
+      'GET /settings/financial': () => ({
+        status: 200,
+        body: {
+          ...response,
+          month: {
+            ...response.month,
+            buckets: response.month.buckets.map((b) =>
+              b.key === 'OBLIGATIONS' ? { ...b, actual: 1_950_000 } : b,
+            ),
+          },
+        },
+      }),
+    });
+    renderWithProviders(<SettingsPage />);
+    const obligations = await screen.findByRole('progressbar', { name: 'Obligaciones' });
+    expect(obligations).toHaveAttribute('aria-valuenow', '98');
+    expect(obligations.firstElementChild).toHaveClass('bg-primary');
+    expect(
+      screen.getByRole('progressbar', { name: 'Entretenimiento' }).firstElementChild,
+    ).toHaveClass('bg-negative');
+    expect(
+      screen.getByText('Con 0 solo se avisa si el disponible queda en negativo.'),
+    ).toBeInTheDocument();
+  });
+});

@@ -175,6 +175,7 @@ function RuleRow({ rule: r, onEdit }: { rule: RecurringRuleDTO; onEdit: () => vo
       <Button
         size="sm"
         variant="ghost"
+        requiresNetwork
         aria-label={`${r.isActive ? 'Pausar' : 'Reanudar'} ${r.name}`}
         loading={togglePause.isPending}
         onClick={() =>
@@ -261,6 +262,7 @@ function UpcomingRow({
             <Button
               size="sm"
               variant="secondary"
+              requiresNetwork
               aria-label={`Omitir ${item.name}`}
               loading={skipping}
               disabled={busy}

@@ -46,7 +46,7 @@ describe('CardFormSheet', () => {
     renderWithProviders(<CardFormSheet open onOpenChange={onOpenChange} card={card} />);
     await userEvent.click(await screen.findByRole('button', { name: 'Eliminar tarjeta' }));
     await vi.advanceTimersByTimeAsync(500);
-    await userEvent.click(screen.getByRole('button', { name: '¿Seguro? Toca de nuevo' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar: Eliminar tarjeta' }));
     expect(
       await screen.findByText('Tarjeta eliminada: se conserva su historial'),
     ).toBeInTheDocument();

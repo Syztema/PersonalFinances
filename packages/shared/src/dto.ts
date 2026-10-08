@@ -12,6 +12,7 @@ import type {
   Theme,
   TransactionType,
 } from './enums';
+import type { ReportPeriod } from './reports';
 
 export interface ApiErrorBody {
   error: { code: string; message: string; fields?: Record<string, string> };
@@ -358,4 +359,41 @@ export interface DashboardBudgetDTO {
   spent: number;
   usage: number;
   projectionExceedsOnDay: number | null;
+}
+
+/** Spec Fase 3 §3.4 (`GET /api/reports`): pesos enteros; `share` y `savingsRate` con 4 decimales. */
+export interface ReportDTO {
+  period: ReportPeriod;
+  totals: {
+    income: number;
+    expense: number;
+    savings: number;
+    investment: number;
+    remaining: number;
+    savingsRate: number | null;
+  };
+  expenseByCategory: Array<{ category: CategoryRefDTO; amount: number; share: number }>;
+  incomeByCategory: Array<{ category: CategoryRefDTO; amount: number; share: number }>;
+  accounts: Array<{
+    account: AccountRefDTO;
+    opening: number;
+    inflow: number;
+    outflow: number;
+    closing: number;
+  }>;
+  cards: Array<{ card: RefDTO; purchases: number; payments: number; closingDebt: number }>;
+  paymentMethods: Array<{ method: DerivedMethod; amount: number; share: number }>;
+  months: Array<{
+    month: string;
+    income: number;
+    expense: number;
+    savings: number;
+    investment: number;
+    remaining: number;
+    closing: { totalMoney: number; debts: number; netWorth: number; savingsBalance: number };
+  }>;
+  budget: {
+    months: Array<{ month: string; budget: number | null; spent: number }>;
+    lines: Array<{ category: CategoryRefDTO; amount: number; spent: number }>;
+  };
 }

@@ -49,7 +49,9 @@ function GoalForm({ goal, onDone }: { goal?: GoalDTO; onDone: () => void }) {
   );
   const remove = useCrudMutation(() => api.del(`/goals/${goal!.id}`), 'Meta eliminada');
   const onError = (err: ApiError) =>
-    setFields(toFormErrors(err, ['name', 'targetAmount', 'targetDate', 'accountId']));
+    setFields(
+      toFormErrors(err, ['name', 'targetAmount', 'targetDate', 'accountId', 'initialAmount']),
+    );
 
   if (accounts.isPending) return <PageSpinner />;
   const reserved = (accounts.data ?? []).filter(
@@ -137,6 +139,7 @@ function GoalForm({ goal, onDone }: { goal?: GoalDTO; onDone: () => void }) {
       <Field
         label="Ya tengo ahorrado (opcional)"
         htmlFor="goal-initial"
+        error={fields.initialAmount}
         hint="Lo que ya tienes para esta meta. No crea movimientos."
       >
         <MoneyInput id="goal-initial" value={initial} onChange={setInitial} />

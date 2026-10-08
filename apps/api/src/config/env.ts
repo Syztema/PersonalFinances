@@ -19,6 +19,8 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(300),
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
+  // Review 3A M1: la memoria de una exportación crece con cada fila; 50.000 es el tope.
+  EXPORT_MAX_ROWS: z.coerce.number().int().min(1).max(50_000).default(20_000),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().min(1).default(587),
   SMTP_SECURE: bool('false'),
@@ -51,6 +53,8 @@ export interface AppConfig {
   logLevel: string;
   rateLimitMax: number;
   loginMaxAttempts: number;
+  /** Spec Fase 3 §4: máximo de movimientos por exportación. */
+  exportMaxRows: number;
   cookieSecure: boolean;
   smtp: SmtpConfig | null;
 }
@@ -84,6 +88,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     logLevel: e.LOG_LEVEL,
     rateLimitMax: e.RATE_LIMIT_MAX,
     loginMaxAttempts: e.LOGIN_MAX_ATTEMPTS,
+    exportMaxRows: e.EXPORT_MAX_ROWS,
     cookieSecure: isProduction,
     smtp: e.SMTP_HOST
       ? {
