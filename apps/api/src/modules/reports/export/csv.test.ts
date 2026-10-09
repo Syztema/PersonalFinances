@@ -3,7 +3,7 @@ import { BOM, csvField, toCsv } from './csv';
 import type { ExportRow } from './rows';
 
 const HEADER =
-  'Fecha;Tipo;Descripción;Categoría;Subcategoría;Cuenta;Cuenta destino;Tarjeta;Préstamo;Cuotas;Método de pago;Valor;Etiquetas;Notas\r\n';
+  'Fecha;Tipo;Descripción;Categoría;Subcategoría;Con quién;Cuenta;Cuenta destino;Tarjeta;Préstamo;Cuotas;Método de pago;Valor;Etiquetas;Notas\r\n';
 
 const row: ExportRow = {
   date: '2026-10-07',
@@ -11,6 +11,7 @@ const row: ExportRow = {
   description: 'Almuerzo; "especial"',
   category: 'Alimentación',
   subcategory: 'Restaurantes',
+  companion: '=Amigos',
   account: 'Bancolombia',
   toAccount: '',
   card: '',
@@ -43,8 +44,8 @@ describe('toCsv (spec Fase 3 §4)', () => {
     expect(toCsv([row])).toBe(
       BOM +
         HEADER +
-        '2026-10-07;Gasto;"Almuerzo; ""especial""";Alimentación;Restaurantes;Bancolombia;;;;;' +
-        "Tarjeta débito;45000;comida, trabajo;'=1+1\r\n",
+        '2026-10-07;Gasto;"Almuerzo; ""especial""";Alimentación;Restaurantes;' +
+        "'=Amigos;Bancolombia;;;;;Tarjeta débito;45000;comida, trabajo;'=1+1\r\n",
     );
   });
 
@@ -52,7 +53,7 @@ describe('toCsv (spec Fase 3 §4)', () => {
     const csv = toCsv([
       { ...row, type: 'Compra con tarjeta', description: 'TV', installments: 12 },
     ]);
-    expect(csv.split('\r\n')[1]?.split(';')[9]).toBe('12');
+    expect(csv.split('\r\n')[1]?.split(';')[10]).toBe('12');
   });
 
   it('writes only the header when there are no movements', () => {

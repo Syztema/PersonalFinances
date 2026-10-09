@@ -48,6 +48,20 @@ const CATEGORIES = [
 ];
 const cat = (id: string) => CATEGORIES.find((c) => c.id === id)!;
 
+const companionRef = (id: string, name: string, isActive = true): RefDTO => ({
+  id,
+  name,
+  icon: 'users',
+  color: '#c2410c',
+  isActive,
+});
+const COMPANIONS = [
+  companionRef('friends', 'Amigos'),
+  companionRef('partner', 'Pareja', false),
+  companionRef('family', 'Familia'),
+];
+const who = (id: string) => COMPANIONS.find((c) => c.id === id)!;
+
 interface EntryInput {
   accountId?: string;
   toAccountId?: string;
@@ -55,6 +69,7 @@ interface EntryInput {
   debtId?: string;
   categoryId?: string;
   paymentMethod?: PaymentMethod;
+  companionId?: string;
 }
 const entry = (
   date: string,
@@ -71,6 +86,7 @@ const entry = (
   debtId: refs.debtId ?? null,
   categoryId: refs.categoryId ?? null,
   paymentMethod: refs.paymentMethod ?? null,
+  companionId: refs.companionId ?? null,
 });
 
 /**
@@ -100,28 +116,46 @@ function sample(): ReportInput {
     ],
     loans: [{ id: 'loan', initialBalance: 5_000_000 }],
     categories: new Map(CATEGORIES.map((c) => [c.id, c])),
+    companions: new Map(COMPANIONS.map((c) => [c.id, c])),
     entries: [
       // Antes del periodo: solo cuentan para los saldos de apertura.
       entry('2026-08-01', 'INCOME', 500_000, { accountId: 'bank', categoryId: 'salary' }),
-      entry('2026-08-10', 'EXPENSE', 30_000, { accountId: 'cash', categoryId: 'food' }),
+      entry('2026-08-10', 'EXPENSE', 30_000, {
+        accountId: 'cash',
+        categoryId: 'food',
+        companionId: 'friends',
+      }),
       // Agosto (desde el 15).
       entry('2026-08-20', 'INCOME', 2_000_000, { accountId: 'bank', categoryId: 'salary' }),
       entry('2026-08-25', 'EXPENSE', 100_000, {
         accountId: 'bank',
         categoryId: 'rest',
         paymentMethod: 'DEBIT_CARD',
+        companionId: 'friends',
       }),
       entry('2026-08-31', 'TRANSFER', 300_000, { accountId: 'bank', toAccountId: 'sav' }),
       // Septiembre.
-      entry('2026-09-05', 'CARD_PURCHASE', 600_000, { creditCardId: 'card', categoryId: 'fun' }),
+      entry('2026-09-05', 'CARD_PURCHASE', 600_000, {
+        creditCardId: 'card',
+        categoryId: 'fun',
+        companionId: 'partner',
+      }),
       entry('2026-09-10', 'CARD_PAYMENT', 200_000, { accountId: 'bank', creditCardId: 'card' }),
       entry('2026-09-15', 'DEBT_PAYMENT', 400_000, { accountId: 'bank', debtId: 'loan' }),
       entry('2026-09-15', 'EXPENSE', 50_000, { accountId: 'bank', categoryId: 'interest' }),
-      entry('2026-09-20', 'EXPENSE', 20_000, { accountId: 'cash', categoryId: 'food' }),
+      entry('2026-09-20', 'EXPENSE', 20_000, {
+        accountId: 'cash',
+        categoryId: 'food',
+        companionId: 'friends',
+      }),
       entry('2026-09-25', 'EXPENSE', 10_000, { accountId: 'new', categoryId: 'adj' }),
       // Octubre (hasta el 10).
       entry('2026-10-01', 'INCOME', 150_000, { accountId: 'new', categoryId: 'extra' }),
-      entry('2026-10-05', 'EXPENSE', 80_000, { accountId: 'bank', categoryId: 'food' }),
+      entry('2026-10-05', 'EXPENSE', 80_000, {
+        accountId: 'bank',
+        categoryId: 'food',
+        companionId: 'family',
+      }),
       entry('2026-10-08', 'DEBT_DISBURSEMENT', 1_000_000, { accountId: 'bank', debtId: 'loan' }),
     ],
   };
@@ -309,5 +343,71 @@ describe('buildReport — monthly series (spec Fase 3 §3.2.6)', () => {
     const lastClosing = months[months.length - 1]!.closing;
     const accounts = buildReport(sample()).accounts;
     expect(lastClosing.totalMoney).toBe(accounts.reduce((s, a) => s + a.closing, 0));
+  });
+});
+
+describe('buildReport — who (spec con quién §4.1)', () => {
+  it('adds up spending by who exactly to the expense total, per month too', () => {
+    const report = buildReport(sample());
+    expect(report.expenseByCompanion).toEqual([
+      { companion: who('partner'), amount: 600_000, share: 0.6977 },
+      { companion: who('friends'), amount: 120_000, share: 0.1395 },
+      { companion: who('family'), amount: 80_000, share: 0.093 },
+      { companion: null, amount: 60_000, share: 0.0698 },
+    ]);
+    const total = report.expenseByCompanion.reduce((s, r) => s + r.amount, 0);
+    expect(total).toBe(report.totals.expense);
+    expect(report.companionMonths).toEqual([
+      { month: '2026-08', items: [{ companionId: 'friends', amount: 100_000 }] },
+      {
+        month: '2026-09',
+        items: [
+          { companionId: 'partner', amount: 600_000 },
+          { companionId: 'friends', amount: 20_000 },
+          { companionId: null, amount: 60_000 },
+        ],
+      },
+      { month: '2026-10', items: [{ companionId: 'family', amount: 80_000 }] },
+    ]);
+    report.companionMonths.forEach((m, i) => {
+      expect(m.items.reduce((s, it) => s + it.amount, 0)).toBe(report.months[i]!.expense);
+    });
+  });
+
+  it('breaks ties by name and counts an unknown option as "Sin indicar"', () => {
+    const input = sample();
+    input.entries = [
+      entry('2026-10-01', 'EXPENSE', 5_000, {
+        accountId: 'bank',
+        categoryId: 'food',
+        companionId: 'friends',
+      }),
+      entry('2026-10-02', 'EXPENSE', 5_000, {
+        accountId: 'bank',
+        categoryId: 'food',
+        companionId: 'family',
+      }),
+      entry('2026-10-03', 'EXPENSE', 7_000, {
+        accountId: 'bank',
+        categoryId: 'food',
+        companionId: 'ghost',
+      }),
+    ];
+    const report = buildReport(input);
+    expect(report.expenseByCompanion.map((r) => [r.companion?.name ?? null, r.amount])).toEqual([
+      ['Amigos', 5_000],
+      ['Familia', 5_000],
+      [null, 7_000],
+    ]);
+  });
+
+  it('returns no rows when there is no spending', () => {
+    const input = sample();
+    input.entries = [
+      entry('2026-10-01', 'INCOME', 5_000, { accountId: 'bank', categoryId: 'salary' }),
+    ];
+    const report = buildReport(input);
+    expect(report.expenseByCompanion).toEqual([]);
+    expect(report.companionMonths.map((m) => m.items)).toEqual([[], [], []]);
   });
 });

@@ -15,6 +15,7 @@ export interface TxFilters {
   accountId: string;
   creditCardId: string;
   categoryId: string;
+  companionId: string;
   tag: string;
   method: DerivedMethod | '';
   minAmount: number | null;
@@ -29,6 +30,7 @@ export const EMPTY_FILTERS: TxFilters = {
   accountId: '',
   creditCardId: '',
   categoryId: '',
+  companionId: '',
   tag: '',
   method: '',
   minAmount: null,
@@ -42,6 +44,7 @@ export function activeFilterCount(f: TxFilters): number {
     !!f.accountId,
     !!f.creditCardId,
     !!f.categoryId,
+    !!f.companionId,
     !!f.tag,
     !!f.method,
     f.minAmount !== null || f.maxAmount !== null,
@@ -76,6 +79,7 @@ export function filtersToParams(f: TxFilters, q: string, today: IsoDate): URLSea
   set('accountId', f.accountId);
   set('creditCardId', f.creditCardId);
   set('categoryId', f.categoryId);
+  set('companionId', f.companionId);
   set('tag', f.tag);
   set('method', f.method);
   set('minAmount', f.minAmount);

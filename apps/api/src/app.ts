@@ -10,6 +10,7 @@ import { categoryRoutes } from './modules/categories/routes';
 import { healthRoutes } from './modules/health/routes';
 import { meRoutes } from './modules/me/routes';
 import { tagRoutes } from './modules/tags/routes';
+import { companionRoutes } from './modules/companions/routes';
 import { creditCardRoutes } from './modules/credit-cards/routes';
 import { debtRoutes } from './modules/debts/routes';
 import { transactionRoutes } from './modules/transactions/routes';
@@ -83,6 +84,7 @@ export async function buildApp(config: AppConfig, deps: AppDeps = {}): Promise<F
       await api.register(accountRoutes);
       await api.register(categoryRoutes);
       await api.register(tagRoutes);
+      await api.register(companionRoutes);
       await api.register(creditCardRoutes);
       await api.register(debtRoutes);
       await api.register(transactionRoutes);

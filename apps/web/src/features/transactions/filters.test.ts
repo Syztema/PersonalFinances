@@ -9,6 +9,7 @@ describe('filters', () => {
         period: 'last-month',
         types: ['EXPENSE', 'CARD_PURCHASE'],
         accountId: 'a1',
+        companionId: 'none',
         minAmount: 1000,
       },
       'almuerzo',
@@ -20,11 +21,13 @@ describe('filters', () => {
       to: '2026-09-30',
       type: 'EXPENSE,CARD_PURCHASE',
       accountId: 'a1',
+      companionId: 'none',
       minAmount: '1000',
       q: 'almuerzo',
     });
     expect(activeFilterCount({ ...EMPTY_FILTERS, period: 'this-month', tag: 'viaje' })).toBe(2);
     expect(activeFilterCount(EMPTY_FILTERS)).toBe(0);
+    expect(activeFilterCount({ ...EMPTY_FILTERS, companionId: 'p4' })).toBe(1);
   });
 
   it('groups movements by date keeping order', () => {

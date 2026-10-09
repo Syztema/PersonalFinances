@@ -7,6 +7,7 @@ import {
   type AccountRefDTO,
   type AccountType,
   type CategoryRefDTO,
+  type CompanionRefDTO,
   type DerivedMethod,
   type IsoDate,
   type PaymentMethod,
@@ -22,6 +23,7 @@ export interface ReportEntry extends LedgerEntry {
   date: IsoDate;
   categoryId: string | null;
   paymentMethod: PaymentMethod | null;
+  companionId: string | null;
 }
 
 export interface ReportInput {
@@ -32,6 +34,8 @@ export interface ReportInput {
   loans: Array<{ id: string; initialBalance: number }>;
   /** Todas las categorías del usuario, activas o eliminadas, por id. */
   categories: Map<string, CategoryRefDTO>;
+  /** Todas las opciones de "con quién" del usuario, activas o eliminadas, por id. */
+  companions: Map<string, CompanionRefDTO>;
   /** Movimientos con fecha ≤ `to`; los anteriores a `from` solo alimentan los saldos de apertura. */
   entries: ReportEntry[];
 }
@@ -151,6 +155,43 @@ function closingAt(input: ReportInput, date: IsoDate): ReportDTO['months'][numbe
   return { totalMoney, debts, netWorth: totalMoney - debts, savingsBalance };
 }
 
+/** Mes calendario recortado al periodo. */
+function monthRange(month: string, period: ReportPeriod): [IsoDate, IsoDate] {
+  const start = monthStartFromKey(month);
+  const end = endOfMonth(start);
+  return [start > period.from ? start : period.from, end < period.to ? end : period.to];
+}
+
+/**
+ * Spec con quién §4.1: gastos (`EXPENSE` + `CARD_PURCHASE`) por compañía; sin compañía (o con una
+ * desconocida) van a "Sin indicar", así Σ = gastos. Por valor y nombre; "Sin indicar" al final.
+ */
+function byCompanion(
+  entries: ReportEntry[],
+  companions: Map<string, CompanionRefDTO>,
+): ReportDTO['expenseByCompanion'] {
+  const sums = new Map<string, number>();
+  let none = 0;
+  for (const e of entries) {
+    if (!isSpending(e)) continue;
+    if (e.companionId && companions.has(e.companionId)) addTo(sums, e.companionId, e.amount);
+    else none += e.amount;
+  }
+  const total = sum([...sums.values()]) + none;
+  const rows: ReportDTO['expenseByCompanion'] = [...sums]
+    .filter(([, amount]) => amount > 0)
+    .map(([id, amount]) => ({
+      companion: companions.get(id)!,
+      amount,
+      share: roundShare(amount / total),
+    }))
+    .sort(
+      (a, b) => b.amount - a.amount || a.companion!.name.localeCompare(b.companion!.name, 'es'),
+    );
+  if (none > 0) rows.push({ companion: null, amount: none, share: roundShare(none / total) });
+  return rows;
+}
+
 /** Spec Fase 3 §3.2: reporte del periodo a partir de los saldos iniciales y los movimientos. */
 export function buildReport(input: ReportInput): ReportBody {
   const { period } = input;
@@ -168,15 +209,23 @@ export function buildReport(input: ReportInput): ReportBody {
     accounts: accountRows(input, inPeriod),
     cards: cardRows(input, inPeriod),
     paymentMethods: byMethod(inPeriod, accountTypes),
+    expenseByCompanion: byCompanion(inPeriod, input.companions),
     months: period.months.map((month) => {
-      const start = monthStartFromKey(month);
-      const end = endOfMonth(start);
-      const from = start > period.from ? start : period.from;
-      const to = end < period.to ? end : period.to;
+      const [from, to] = monthRange(month, period);
       return {
         month,
         ...monthFlows(between(input.entries, from, to), accountTypes),
         closing: closingAt(input, to),
+      };
+    }),
+    companionMonths: period.months.map((month) => {
+      const [from, to] = monthRange(month, period);
+      return {
+        month,
+        items: byCompanion(between(input.entries, from, to), input.companions).map((r) => ({
+          companionId: r.companion?.id ?? null,
+          amount: r.amount,
+        })),
       };
     }),
   };

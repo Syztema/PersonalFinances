@@ -6,6 +6,8 @@ import { zAmount, zId, zIsoDate, zNonNegativeAmount, zOptionalText } from './com
 
 const zTags = z.array(z.string().trim().toLowerCase().min(1).max(30)).max(10).default([]);
 const zInstallments = z.number().int().min(1).max(48);
+/** Spec con quién §2.3: con quién se gastó; ausente o null = sin indicar. */
+const zCompanion = zId.nullish();
 
 const base = {
   amount: zAmount,
@@ -44,6 +46,7 @@ export const expenseSchema = z.strictObject({
   accountId: zId,
   categoryId: zId,
   paymentMethod: z.enum(PAYMENT_METHODS).nullish(),
+  companionId: zCompanion,
 });
 export const transferSchema = z
   .strictObject({ type: z.literal('TRANSFER'), ...transferFields })
@@ -54,6 +57,7 @@ const cardPurchaseFields = {
   creditCardId: zId,
   categoryId: zId,
   installments: zInstallments.default(1),
+  companionId: zCompanion,
 };
 export const cardPurchaseSchema = z.strictObject({
   type: z.literal('CARD_PURCHASE'),
@@ -109,6 +113,8 @@ export const transactionListQuerySchema = z
     accountId: zId.optional(),
     creditCardId: zId.optional(),
     debtId: zId.optional(),
+    /** Una opción, o `none`: gastos sin compañía (spec con quién §3.2). */
+    companionId: z.union([zId, z.literal('none')]).optional(),
     tag: z.string().trim().toLowerCase().max(30).optional(),
     method: z.enum(DERIVED_METHODS).optional(),
     minAmount: z.coerce.number().int().min(0).max(MAX_AMOUNT).optional(),

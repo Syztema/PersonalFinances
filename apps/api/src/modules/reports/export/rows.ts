@@ -15,6 +15,7 @@ export const EXPORT_COLUMNS = [
   'Descripción',
   'Categoría',
   'Subcategoría',
+  'Con quién',
   'Cuenta',
   'Cuenta destino',
   'Tarjeta',
@@ -46,6 +47,7 @@ export interface ExportTransaction {
   creditCard: { name: string } | null;
   debt: { name: string } | null;
   category: { name: string; parent: { name: string } | null } | null;
+  companion: { name: string } | null;
   tags: string[];
 }
 
@@ -56,6 +58,7 @@ export interface ExportRow {
   description: string;
   category: string;
   subcategory: string;
+  companion: string;
   account: string;
   toAccount: string;
   card: string;
@@ -75,6 +78,7 @@ export function toExportRow(t: ExportTransaction): ExportRow {
     description: t.description ?? '',
     category: t.category ? (t.category.parent?.name ?? t.category.name) : '',
     subcategory: t.category?.parent ? t.category.name : '',
+    companion: t.companion?.name ?? '',
     account: t.account?.name ?? '',
     toAccount: t.toAccount?.name ?? '',
     card: t.creditCard?.name ?? '',

@@ -25,6 +25,7 @@ const disbursement: TransactionDTO = {
   creditCard: null,
   debt: { id: 'd1', name: 'Préstamo', icon: 'landmark', color: '#123456', isActive: true },
   category: null,
+  companion: null,
   goalId: null,
   installments: null,
   paymentMethod: null,
@@ -44,5 +45,29 @@ describe('TransactionDetailSheet', () => {
     );
     expect(screen.getByRole('button', { name: 'Eliminar' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument();
+  });
+
+  it('shows who an expense was with, marking a deleted option', () => {
+    renderWithProviders(
+      <QuickAddProvider>
+        <TransactionDetailSheet
+          transaction={{
+            ...disbursement,
+            type: 'EXPENSE',
+            debt: null,
+            companion: {
+              id: 'p3',
+              name: 'Vecinos',
+              icon: 'home',
+              color: '#2563eb',
+              isActive: false,
+            },
+          }}
+          onClose={() => undefined}
+        />
+      </QuickAddProvider>,
+    );
+    expect(screen.getByText('Con quién')).toBeInTheDocument();
+    expect(screen.getByText('Vecinos (eliminada)')).toBeInTheDocument();
   });
 });

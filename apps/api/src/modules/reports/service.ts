@@ -58,6 +58,7 @@ interface GroupRow {
   debtId: string | null;
   categoryId?: string | null;
   paymentMethod?: PaymentMethod | null;
+  companionId?: string | null;
   _sum: { amount: bigint | null };
 }
 
@@ -71,6 +72,7 @@ const entryOf = (r: GroupRow, date: IsoDate): ReportEntry => ({
   debtId: r.debtId,
   categoryId: r.categoryId ?? null,
   paymentMethod: r.paymentMethod ?? null,
+  companionId: r.companionId ?? null,
 });
 
 /** Movimientos del periodo (para contar y exportar). */
@@ -105,6 +107,7 @@ export async function loadReportData(
     select: { id: true, initialBalance: true },
   });
   const categories = await db.category.findMany({ where: { userId }, select: categoryRefSelect });
+  const companions = await db.companion.findMany({ where: { userId }, select: refSelect });
   const dayBefore = addDays(period.from, -1);
   const before = await ledgerEntries(db, userId, { to: dayBefore });
   const inPeriod = await db.transaction.groupBy({
@@ -117,6 +120,7 @@ export async function loadReportData(
       'debtId',
       'categoryId',
       'paymentMethod',
+      'companionId',
     ],
     where: periodWhere(userId, period),
     _sum: { amount: true },
@@ -130,8 +134,15 @@ export async function loadReportData(
     cards: cards.map(({ initialDebt, ...ref }) => ({ ref, initialDebt: num(initialDebt) })),
     loans: loans.map((l) => ({ id: l.id, initialBalance: num(l.initialBalance) })),
     categories: new Map(categories.map((c) => [c.id, c])),
+    companions: new Map(companions.map((c) => [c.id, c])),
     entries: [
-      ...before.map((e) => ({ ...e, date: dayBefore, categoryId: null, paymentMethod: null })),
+      ...before.map((e) => ({
+        ...e,
+        date: dayBefore,
+        categoryId: null,
+        paymentMethod: null,
+        companionId: null,
+      })),
       ...inPeriod.map((r) => entryOf(r, fromDbDate(r.date))),
     ],
   };
@@ -163,6 +174,7 @@ const exportSelect = {
   creditCard: { select: { name: true } },
   debt: { select: { name: true } },
   category: { select: { name: true, parent: { select: { name: true } } } },
+  companion: { select: { name: true } },
   tags: { select: { tag: { select: { name: true } } } },
 } satisfies Prisma.TransactionSelect;
 

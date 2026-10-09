@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { ReportDTO } from './dto';
 import { todayIn } from './dates';
 import {
+  groupCompanionSeries,
   groupTop,
   MAX_REPORT_MONTHS,
   REPORT_PRESET_LABELS,
@@ -183,6 +185,84 @@ describe('report query schemas', () => {
     expect(periodInputOf({ from: '2026-08-15', to: '2026-10-10' })).toEqual({
       from: '2026-08-15',
       to: '2026-10-10',
+    });
+  });
+});
+
+describe('groupCompanionSeries (spec con quién §4.2)', () => {
+  const ref = (id: string, name: string) => ({
+    id,
+    name,
+    icon: 'users',
+    color: '#c2410c',
+    isActive: true,
+  });
+  type Rows = ReportDTO['expenseByCompanion'];
+
+  it('keeps five options, adds the rest in "Otros" and "Sin indicar" last, per month too', () => {
+    const rows: Rows = [
+      { companion: ref('a', 'Amigos'), amount: 600, share: 0.3 },
+      { companion: ref('b', 'Bea'), amount: 400, share: 0.2 },
+      { companion: ref('c', 'Carlos'), amount: 300, share: 0.15 },
+      { companion: ref('d', 'Dani'), amount: 200, share: 0.1 },
+      { companion: ref('e', 'Eva'), amount: 100, share: 0.05 },
+      { companion: ref('f', 'Fede'), amount: 60, share: 0.03 },
+      { companion: ref('g', 'Gabi'), amount: 40, share: 0.02 },
+      { companion: null, amount: 300, share: 0.15 },
+    ];
+    const months: ReportDTO['companionMonths'] = [
+      {
+        month: '2026-09',
+        items: [
+          { companionId: 'a', amount: 600 },
+          { companionId: 'f', amount: 60 },
+          { companionId: null, amount: 100 },
+        ],
+      },
+      {
+        month: '2026-10',
+        items: [
+          { companionId: 'b', amount: 400 },
+          { companionId: 'c', amount: 300 },
+          { companionId: 'd', amount: 200 },
+          { companionId: 'e', amount: 100 },
+          { companionId: 'g', amount: 40 },
+          { companionId: null, amount: 200 },
+        ],
+      },
+    ];
+    const result = groupCompanionSeries(rows, months);
+    expect(result.series.map((s) => [s.key, s.amount, s.share])).toEqual([
+      ['a', 600, 0.3],
+      ['b', 400, 0.2],
+      ['c', 300, 0.15],
+      ['d', 200, 0.1],
+      ['e', 100, 0.05],
+      ['other', 100, 0.05],
+      ['none', 300, 0.15],
+    ]);
+    expect(result.series.find((s) => s.key === 'other')?.companion).toBeNull();
+    expect(result.months).toEqual([
+      { month: '2026-09', values: { a: 600, b: 0, c: 0, d: 0, e: 0, other: 60, none: 100 } },
+      { month: '2026-10', values: { a: 0, b: 400, c: 300, d: 200, e: 100, other: 40, none: 200 } },
+    ]);
+  });
+
+  it('sorts by amount and then by name, without "Otros" when nothing is left over', () => {
+    const rows: Rows = [
+      { companion: null, amount: 900, share: 0.6 },
+      { companion: ref('z', 'Zoe'), amount: 300, share: 0.2 },
+      { companion: ref('m', 'Mamá'), amount: 300, share: 0.2 },
+    ];
+    const result = groupCompanionSeries(rows, [{ month: '2026-10', items: [] }]);
+    expect(result.series.map((s) => s.key)).toEqual(['m', 'z', 'none']);
+    expect(result.months).toEqual([{ month: '2026-10', values: { m: 0, z: 0, none: 0 } }]);
+  });
+
+  it('returns no series for a period without spending', () => {
+    expect(groupCompanionSeries([], [{ month: '2026-10', items: [] }])).toEqual({
+      series: [],
+      months: [{ month: '2026-10', values: {} }],
     });
   });
 });

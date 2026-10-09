@@ -6,6 +6,13 @@ export function parse<S extends z.ZodType>(schema: S, data: unknown): z.output<S
   if (result.success) return result.data;
   const fields: Record<string, string> = {};
   for (const issue of result.error.issues) {
+    // Spec con quién §2.3: una clave que el esquema no admite se informa en su propio campo.
+    if (issue.code === 'unrecognized_keys') {
+      for (const key of issue.keys) {
+        fields[[...issue.path, key].join('.')] ??= 'Campo no permitido';
+      }
+      continue;
+    }
     const key = issue.path.join('.') || '_';
     fields[key] ??= issue.message;
   }

@@ -74,6 +74,44 @@ const categories = [
   },
 ];
 
+const companions = [
+  {
+    id: 'p1',
+    name: 'Solo',
+    icon: 'user',
+    color: '#475569',
+    isActive: true,
+    sortOrder: 0,
+    usageCount: 0,
+  },
+  {
+    id: 'p2',
+    name: 'Pareja',
+    icon: 'heart',
+    color: '#be185d',
+    isActive: true,
+    sortOrder: 1,
+    usageCount: 2,
+  },
+  {
+    id: 'p3',
+    name: 'Vecinos',
+    icon: 'home',
+    color: '#2563eb',
+    isActive: false,
+    sortOrder: 2,
+    usageCount: 1,
+  },
+  {
+    id: 'p4',
+    name: 'Amigos',
+    icon: 'users',
+    color: '#c2410c',
+    isActive: true,
+    sortOrder: 3,
+    usageCount: 5,
+  },
+];
 let posted: unknown[] = [];
 let release: () => void = () => undefined;
 
@@ -84,6 +122,7 @@ function setup(slowSave = false, extra: Parameters<typeof mockApi>[0] = {}) {
     'GET /accounts': () => ({ status: 200, body: { items: accounts } }),
     'GET /credit-cards': () => ({ status: 200, body: { items: cards } }),
     'GET /categories': () => ({ status: 200, body: { items: categories } }),
+    'GET /companions': () => ({ status: 200, body: { items: companions } }),
     'GET /scheduled/suggestions': () => ({ status: 200, body: { items: [] } }),
     'POST /transactions': async (body) => {
       posted.push(body);
@@ -303,7 +342,7 @@ describe('TransactionForm (edit and errors)', () => {
     renderWithProviders(<TransactionForm mode="expense" edit={edit} onDone={() => undefined} />);
     expect(await screen.findByLabelText('Valor')).toBeDisabled();
     expect(screen.getByRole('note')).toHaveTextContent(
-      '"Nequi" fue eliminada: solo puedes cambiar la categoría, la descripción, las etiquetas y las notas. Restáurala',
+      '"Nequi" fue eliminada: solo puedes cambiar la categoría, con quién, la descripción, las etiquetas y las notas. Restáurala',
     );
     expect(screen.queryByRole('radio', { name: /Nu Crédito/ })).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Descripción (opcional)'), 'Mercado');
@@ -320,6 +359,7 @@ describe('TransactionForm (edit and errors)', () => {
       notes: null,
       tags: [],
       payee: null,
+      companionId: null,
     });
   });
 
@@ -365,6 +405,7 @@ describe('TransactionForm (edit and errors)', () => {
       accountId: 'a1',
       paymentMethod: null,
       payee: null,
+      companionId: null,
     });
   });
 
@@ -414,6 +455,7 @@ describe('TransactionForm (edit and errors)', () => {
       notes: null,
       tags: [],
       payee: null,
+      companionId: null,
     });
   });
 
@@ -805,6 +847,7 @@ describe('TransactionForm (Fase 3: recurrente que ya existía, pendiente 4)', ()
     tags: [],
     accountId: 'a1',
     paymentMethod: null,
+    companionId: null,
   };
 
   /** Llena un gasto, marca "Recurrente" y toca Guardar; `null` simula que las sugerencias fallan. */
@@ -908,5 +951,274 @@ describe('TransactionForm system categories (final review M6)', () => {
     renderWithProviders(<TransactionForm mode="expense" onDone={() => undefined} />);
     expect(await screen.findByRole('radio', { name: /Alimentación/ })).toBeInTheDocument();
     expect(screen.queryByText(/Ajuste de saldo/)).not.toBeInTheDocument();
+  });
+});
+
+describe('TransactionForm — con quién (spec con quién §3.1)', () => {
+  const option = (name: string) => screen.getByRole('button', { name });
+
+  it('shows the options without preselection; a second tap clears the chosen one', async () => {
+    setup();
+    renderWithProviders(<TransactionForm mode="expense" onDone={() => undefined} />);
+    await screen.findByRole('group', { name: '¿Con quién?' });
+    expect(screen.queryByRole('button', { name: 'Vecinos' })).not.toBeInTheDocument();
+    for (const name of ['Solo', 'Pareja', 'Amigos']) {
+      expect(option(name)).toHaveAttribute('aria-pressed', 'false');
+    }
+    await userEvent.click(option('Amigos'));
+    expect(option('Amigos')).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(option('Pareja'));
+    expect(option('Amigos')).toHaveAttribute('aria-pressed', 'false');
+    expect(option('Pareja')).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(option('Pareja'));
+    expect(option('Pareja')).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(option('Amigos'));
+    await userEvent.type(screen.getByLabelText('Valor'), '25000');
+    await userEvent.click(screen.getByRole('radio', { name: /Alimentación/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({
+      type: 'EXPENSE',
+      amount: 25_000,
+      date: expect.any(String),
+      categoryId: 'k1',
+      description: null,
+      notes: null,
+      tags: [],
+      accountId: 'a1',
+      paymentMethod: null,
+      companionId: 'p4',
+    });
+  });
+
+  it('sends who with a card purchase, and never shows it for an income', async () => {
+    setup();
+    const { unmount } = renderWithProviders(
+      <TransactionForm mode="expense" onDone={() => undefined} />,
+    );
+    await userEvent.type(await screen.findByLabelText('Valor'), '90000');
+    await userEvent.click(screen.getByRole('radio', { name: /Alimentación/ }));
+    await userEvent.click(screen.getByRole('radio', { name: /Nu Crédito/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Solo' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({
+      type: 'CARD_PURCHASE',
+      amount: 90_000,
+      date: expect.any(String),
+      categoryId: 'k1',
+      description: null,
+      notes: null,
+      tags: [],
+      creditCardId: 'c1',
+      installments: 1,
+      companionId: 'p1',
+    });
+    unmount();
+
+    renderWithProviders(<TransactionForm mode="income" onDone={() => undefined} />);
+    await userEvent.type(await screen.findByLabelText('Valor'), '100000');
+    await userEvent.click(screen.getByRole('radio', { name: /Salario/ }));
+    expect(screen.queryByText('¿Con quién?')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(posted).toHaveLength(2));
+    expect(posted[1]).not.toHaveProperty('companionId');
+  });
+
+  it('keeps a deleted option marked and selected when editing, and can clear it', async () => {
+    const puts: Record<string, unknown>[] = [];
+    setup(false, {
+      'PUT /transactions/t9': (body) => {
+        puts.push(body as Record<string, unknown>);
+        return { status: 200, body: { transaction: { id: 't9' }, warnings: [] } };
+      },
+    });
+    const edit = {
+      id: 't9',
+      type: 'EXPENSE',
+      amount: 8000,
+      date: '2026-10-05',
+      description: null,
+      payee: null,
+      notes: null,
+      tags: [],
+      installments: null,
+      paymentMethod: null,
+      account: { id: 'a1', name: 'Nequi', isActive: true },
+      creditCard: null,
+      category: { id: 'k1', name: 'Alimentación', isActive: true },
+      companion: { id: 'p3', name: 'Vecinos', icon: 'home', color: '#2563eb', isActive: false },
+    } as unknown as TransactionDTO;
+    const { unmount } = renderWithProviders(
+      <TransactionForm mode="expense" edit={edit} onDone={() => undefined} />,
+    );
+    const deleted = await screen.findByRole('button', { name: 'Vecinos (eliminada)' });
+    expect(deleted).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(puts).toHaveLength(1));
+    expect(puts[0]).toEqual({
+      type: 'EXPENSE',
+      amount: 8000,
+      date: '2026-10-05',
+      categoryId: 'k1',
+      description: null,
+      notes: null,
+      tags: [],
+      accountId: 'a1',
+      paymentMethod: null,
+      payee: null,
+      companionId: 'p3',
+    });
+    unmount();
+
+    renderWithProviders(<TransactionForm mode="expense" edit={edit} onDone={() => undefined} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Vecinos (eliminada)' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(puts).toHaveLength(2));
+    expect(puts[1]).toEqual({
+      type: 'EXPENSE',
+      amount: 8000,
+      date: '2026-10-05',
+      categoryId: 'k1',
+      description: null,
+      notes: null,
+      tags: [],
+      accountId: 'a1',
+      paymentMethod: null,
+      payee: null,
+      companionId: null,
+    });
+  });
+
+  const editWith = (isActive: boolean) =>
+    ({
+      id: 't9',
+      type: 'EXPENSE',
+      amount: 8000,
+      date: '2026-10-05',
+      description: null,
+      payee: null,
+      notes: null,
+      tags: [],
+      installments: null,
+      paymentMethod: null,
+      account: { id: 'a1', name: 'Nequi', isActive: true },
+      creditCard: null,
+      category: { id: 'k1', name: 'Alimentación', isActive: true },
+      companion: { id: 'p3', name: 'Vecinos', icon: 'home', color: '#2563eb', isActive },
+    }) as unknown as TransactionDTO;
+  const vecinos = (isActive: boolean) => ({
+    id: 'p3',
+    name: 'Vecinos',
+    icon: 'home',
+    color: '#2563eb',
+    isActive,
+    sortOrder: 9,
+    usageCount: 0,
+  });
+
+  it('shows one pressed option when it was restored since the snapshot', async () => {
+    setup(false, {
+      'GET /companions': () => ({ status: 200, body: { items: [...companions, vecinos(true)] } }),
+    });
+    renderWithProviders(
+      <TransactionForm mode="expense" edit={editWith(false)} onDone={() => undefined} />,
+    );
+    const only = await screen.findByRole('button', { name: 'Vecinos' });
+    expect(only).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: 'Vecinos (eliminada)' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the option selectable and clearable when it was deleted since the snapshot', async () => {
+    const puts: Record<string, unknown>[] = [];
+    setup(false, {
+      'GET /companions': () => ({ status: 200, body: { items: [...companions, vecinos(false)] } }),
+      'PUT /transactions/t9': (body) => {
+        puts.push(body as Record<string, unknown>);
+        return { status: 200, body: { transaction: { id: 't9' }, warnings: [] } };
+      },
+    });
+    renderWithProviders(
+      <TransactionForm mode="expense" edit={editWith(true)} onDone={() => undefined} />,
+    );
+    const deleted = await screen.findByRole('button', { name: 'Vecinos (eliminada)' });
+    expect(deleted).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: 'Vecinos' })).not.toBeInTheDocument();
+    await userEvent.click(deleted);
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(puts).toHaveLength(1));
+    expect(puts[0]).toEqual({
+      type: 'EXPENSE',
+      amount: 8000,
+      date: '2026-10-05',
+      categoryId: 'k1',
+      description: null,
+      notes: null,
+      tags: [],
+      accountId: 'a1',
+      paymentMethod: null,
+      payee: null,
+      companionId: null,
+    });
+  });
+
+  it('still saves when the options cannot load', async () => {
+    setup(false, {
+      'GET /companions': () => ({
+        status: 500,
+        body: { error: { code: 'INTERNAL', message: 'Error' } },
+      }),
+    });
+    const onDone = vi.fn();
+    renderWithProviders(<TransactionForm mode="expense" onDone={onDone} />);
+    await userEvent.type(await screen.findByLabelText('Valor'), '12000');
+    await userEvent.click(screen.getByRole('radio', { name: /Alimentación/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(screen.queryByText('¿Con quién?')).not.toBeInTheDocument();
+    expect(posted[0]).toEqual({
+      type: 'EXPENSE',
+      amount: 12_000,
+      date: expect.any(String),
+      categoryId: 'k1',
+      description: null,
+      notes: null,
+      tags: [],
+      accountId: 'a1',
+      paymentMethod: null,
+      companionId: null,
+    });
+  });
+
+  it('links "Editar opciones" to the tab and closes the sheet', async () => {
+    setup();
+    const onDone = vi.fn();
+    renderWithProviders(<TransactionForm mode="expense" onDone={onDone} />);
+    const link = await screen.findByRole('link', { name: 'Editar opciones' });
+    expect(link).toHaveAttribute('href', '/categories?tab=companions');
+    await userEvent.click(link);
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('shows the server error under the row', async () => {
+    setup(false, {
+      'POST /transactions': () => ({
+        status: 400,
+        body: {
+          error: {
+            code: 'INVALID_REFERENCE',
+            message: 'Revisa las cuentas, tarjetas o categorías seleccionadas.',
+            fields: { companionId: 'La opción fue eliminada' },
+          },
+        },
+      }),
+    });
+    renderWithProviders(<TransactionForm mode="expense" onDone={() => undefined} />);
+    await userEvent.type(await screen.findByLabelText('Valor'), '12000');
+    await userEvent.click(screen.getByRole('radio', { name: /Alimentación/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Pareja' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    expect(await screen.findByText('La opción fue eliminada')).toBeInTheDocument();
   });
 });

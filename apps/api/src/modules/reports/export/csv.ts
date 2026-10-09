@@ -22,6 +22,7 @@ export function toCsv(rows: ExportRow[]): string {
       r.description,
       r.category,
       r.subcategory,
+      r.companion,
       r.account,
       r.toAccount,
       r.card,

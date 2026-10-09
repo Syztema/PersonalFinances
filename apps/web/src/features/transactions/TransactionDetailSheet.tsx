@@ -43,6 +43,7 @@ export function TransactionDetailSheet({
     ['Tipo', d.typeLabel],
     ['Fecha', formatDate(transaction.date)],
     ['Categoría', refName(transaction.category)],
+    ['Con quién', refName(transaction.companion)],
     ['Cuenta', refName(transaction.account)],
     ['Cuenta destino', refName(transaction.toAccount)],
     ['Tarjeta', refName(transaction.creditCard)],

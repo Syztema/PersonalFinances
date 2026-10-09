@@ -1,6 +1,7 @@
 import { BUCKET_LABELS, type CategoryDTO, type CategoryKind } from '@finanzas/shared';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Button } from '../../components/ui/Button';
 import { Chips } from '../../components/ui/Chips';
 import { DeletedSection } from '../../components/ui/DeletedSection';
@@ -11,13 +12,25 @@ import { Icon } from '../../lib/icons';
 import { useCategories } from '../../lib/queries';
 import { useRestore } from '../../lib/useRestore';
 import { CategoryFormSheet } from './CategoryFormSheet';
+import { CompanionsList } from './CompanionsList';
 import { TagsList } from './TagsList';
 
-type Tab = CategoryKind | 'TAGS';
+type Tab = CategoryKind | 'TAGS' | 'COMPANIONS';
+
+/** Decisión B2: la pestaña vive en `?tab=` para que "Editar opciones" la abra aunque la pantalla ya esté abierta. */
+const TABS: Record<string, Tab> = {
+  expense: 'EXPENSE',
+  income: 'INCOME',
+  tags: 'TAGS',
+  companions: 'COMPANIONS',
+};
 
 export function CategoriesPage() {
   const categories = useCategories();
-  const [tab, setTab] = useState<Tab>('EXPENSE');
+  const [params, setParams] = useSearchParams();
+  const key = params.get('tab') ?? '';
+  const tab: Tab = Object.hasOwn(TABS, key) ? (TABS[key] ?? 'EXPENSE') : 'EXPENSE';
+  const setTab = (next: Tab) => setParams({ tab: next.toLowerCase() }, { replace: true });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryDTO | undefined>();
   const { restore, isRestoring } = useRestore(
@@ -69,7 +82,7 @@ export function CategoriesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Categorías</h1>
-        {tab !== 'TAGS' && (
+        {(tab === 'EXPENSE' || tab === 'INCOME') && (
           <Button size="sm" onClick={() => edit()} aria-label="Nueva categoría">
             <Plus size={16} /> Nueva
           </Button>
@@ -83,10 +96,13 @@ export function CategoriesPage() {
           { value: 'EXPENSE', label: 'Gastos' },
           { value: 'INCOME', label: 'Ingresos' },
           { value: 'TAGS', label: 'Etiquetas' },
+          { value: 'COMPANIONS', label: 'Con quién' },
         ]}
       />
       {tab === 'TAGS' ? (
         <TagsList />
+      ) : tab === 'COMPANIONS' ? (
+        <CompanionsList />
       ) : (
         <>
           <ul className="divide-y divide-border overflow-hidden rounded-2xl bg-surface ring-1 ring-border">

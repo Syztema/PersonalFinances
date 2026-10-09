@@ -58,6 +58,12 @@ export async function listTransactions(
   if (q.accountId) and.push({ OR: [{ accountId: q.accountId }, { toAccountId: q.accountId }] });
   if (q.creditCardId) where.creditCardId = q.creditCardId;
   if (q.debtId) where.debtId = q.debtId;
+  if (q.companionId === 'none') {
+    // Igual que "Sin indicar" en el reporte: gastos (intereses incluidos) sin compañía.
+    and.push({ companionId: null, type: { in: ['EXPENSE', 'CARD_PURCHASE'] } });
+  } else if (q.companionId) {
+    where.companionId = q.companionId;
+  }
   if (q.tag) where.tags = { some: { tag: { name: q.tag } } };
   if (q.method) and.push(methodWhere(q.method));
   if (q.minAmount !== undefined || q.maxAmount !== undefined) {

@@ -16,12 +16,17 @@ function monthStartBack(date: string, back: number): string {
 test('reports: change the period and export a non-empty Excel file', async ({ page }) => {
   await registerUser(page, 'reports');
   await createAccount(page, 'Cuenta e2e', '1000000');
-  await addExpense(page, '35000', 'Transporte');
+  await addExpense(page, '35000', 'Transporte', 'Amigos');
 
   await page.getByRole('link', { name: 'Más', exact: true }).click();
   await page.getByRole('link', { name: 'Reportes', exact: true }).click();
   await expect(page).toHaveURL(/\/reports$/);
   await expect(page.getByRole('heading', { name: 'Reportes', level: 1 })).toBeVisible();
+
+  // Con quién (spec con quién §4.3): "Este mes" ya muestra el gasto con Amigos.
+  const who = page.getByRole('region', { name: 'Gastos por compañía' });
+  await who.getByRole('button', { name: 'Ver tabla' }).click();
+  await expect(who.getByRole('row', { name: /Amigos/ })).toContainText('$35.000');
 
   // Los periodos son un grupo de opción (Chips): cada uno es un radio.
   const threeMonths = page.getByRole('radio', { name: '3 meses' });

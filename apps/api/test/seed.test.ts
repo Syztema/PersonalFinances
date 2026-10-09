@@ -54,6 +54,9 @@ describe('demo seed', () => {
         where: { userId, type: 'CARD_PURCHASE', installments: { gt: 1 } },
       }),
     ).toBe(1);
+    expect(
+      await app.prisma.transaction.count({ where: { userId, companionId: { not: null } } }),
+    ).toBeGreaterThan(0);
   });
 
   it('adds a budget, the computer goal and linked recurring items (spec 16)', async () => {

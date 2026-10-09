@@ -56,6 +56,7 @@ export function rowData(input: TransactionInput) {
         accountId: input.accountId,
         categoryId: input.categoryId,
         paymentMethod: input.paymentMethod ?? null,
+        companionId: input.companionId ?? null,
       };
     case 'TRANSFER':
       return {
@@ -70,6 +71,7 @@ export function rowData(input: TransactionInput) {
         creditCardId: input.creditCardId,
         categoryId: input.categoryId,
         installments: input.installments,
+        companionId: input.companionId ?? null,
       };
     case 'CARD_PAYMENT':
       return { ...common, creditCardId: input.creditCardId, accountId: input.accountId };
@@ -99,6 +101,7 @@ const NO_REFS = {
   goalId: null,
   installments: null,
   paymentMethod: null,
+  companionId: null,
 };
 
 /** Fila completa del tipo: los campos que no aplican quedan en null (para editar y comparar). */

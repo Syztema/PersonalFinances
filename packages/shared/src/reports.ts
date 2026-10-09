@@ -1,3 +1,4 @@
+import type { CompanionRefDTO, ReportDTO } from './dto';
 import {
   addMonths,
   endOfMonth,
@@ -96,5 +97,70 @@ export function groupTop<T extends { amount: number; share: number }>(
   return {
     top: sorted.slice(0, n),
     other: amount > 0 ? { amount, share: roundShare(rest.reduce((s, r) => s + r.share, 0)) } : null,
+  };
+}
+
+/** Una serie de la gráfica "Con quién gastas, mes a mes": una compañía, `'other'` u `'none'`. */
+export interface CompanionSeries {
+  key: string;
+  companion: CompanionRefDTO | null;
+  amount: number;
+  share: number;
+}
+
+export interface CompanionSeriesResult {
+  series: CompanionSeries[];
+  months: Array<{ month: string; values: Record<string, number> }>;
+}
+
+/**
+ * Spec con quién §4.2: las `n` compañías con más gasto del periodo, "Otros" (el resto, si suma más
+ * de 0) y "Sin indicar" (si suma más de 0), y el valor de cada serie en cada mes.
+ */
+export function groupCompanionSeries(
+  rows: ReportDTO['expenseByCompanion'],
+  months: ReportDTO['companionMonths'],
+  n = 5,
+): CompanionSeriesResult {
+  const named = rows
+    .filter((r): r is typeof r & { companion: CompanionRefDTO } => r.companion !== null)
+    .sort((a, b) => b.amount - a.amount || a.companion.name.localeCompare(b.companion.name, 'es'));
+  const top = named.slice(0, n);
+  const rest = named.slice(n);
+  const none = rows.find((r) => r.companion === null);
+  const otherAmount = rest.reduce((s, r) => s + r.amount, 0);
+  const series: CompanionSeries[] = top.map((r) => ({
+    key: r.companion.id,
+    companion: r.companion,
+    amount: r.amount,
+    share: r.share,
+  }));
+  if (otherAmount > 0) {
+    series.push({
+      key: 'other',
+      companion: null,
+      amount: otherAmount,
+      share: roundShare(rest.reduce((s, r) => s + r.share, 0)),
+    });
+  }
+  if (none && none.amount > 0) {
+    series.push({ key: 'none', companion: null, amount: none.amount, share: none.share });
+  }
+  const topIds = new Set(top.map((r) => r.companion.id));
+  return {
+    series,
+    months: months.map((m) => {
+      const values: Record<string, number> = Object.fromEntries(series.map((s) => [s.key, 0]));
+      for (const item of m.items) {
+        const key =
+          item.companionId === null
+            ? 'none'
+            : topIds.has(item.companionId)
+              ? item.companionId
+              : 'other';
+        values[key] = (values[key] ?? 0) + item.amount;
+      }
+      return { month: m.month, values };
+    }),
   };
 }

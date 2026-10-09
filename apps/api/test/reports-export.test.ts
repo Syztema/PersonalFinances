@@ -205,6 +205,7 @@ const HEADER = [
   'Descripción',
   'Categoría',
   'Subcategoría',
+  'Con quién',
   'Cuenta',
   'Cuenta destino',
   'Tarjeta',
@@ -238,6 +239,7 @@ describe('GET /api/reports/export — CSV (spec Fase 3 §4)', () => {
         "'+bono",
         'Salario',
         '',
+        '',
         'Bancolombia',
         '',
         '',
@@ -256,6 +258,7 @@ describe('GET /api/reports/export — CSV (spec Fase 3 §4)', () => {
         '',
         '',
         '',
+        '',
         'Nu Crédito',
         '',
         '12',
@@ -268,6 +271,7 @@ describe('GET /api/reports/export — CSV (spec Fase 3 §4)', () => {
         '2026-10-04',
         'Transferencia',
         'Paso a Nequi',
+        '',
         '',
         '',
         'Bancolombia',
@@ -286,6 +290,7 @@ describe('GET /api/reports/export — CSV (spec Fase 3 §4)', () => {
         'Almuerzo; "especial"\ncon postre 🍕',
         'Alimentación',
         '',
+        '',
         'Bancolombia',
         '',
         '',
@@ -302,6 +307,7 @@ describe('GET /api/reports/export — CSV (spec Fase 3 §4)', () => {
         'Cena',
         'Alimentación',
         'Restaurantes',
+        '',
         'Efectivo',
         '',
         '',
@@ -315,6 +321,7 @@ describe('GET /api/reports/export — CSV (spec Fase 3 §4)', () => {
       [
         '2026-10-10',
         'Pago de préstamo',
+        '',
         '',
         '',
         '',
@@ -334,6 +341,7 @@ describe('GET /api/reports/export — CSV (spec Fase 3 §4)', () => {
         'Intereses Libre inversión',
         'Intereses y comisiones',
         '',
+        '',
         'Bancolombia',
         '',
         '',
@@ -347,6 +355,7 @@ describe('GET /api/reports/export — CSV (spec Fase 3 §4)', () => {
       [
         '2026-10-12',
         'Desembolso',
+        '',
         '',
         '',
         '',
@@ -395,6 +404,7 @@ describe('GET /api/reports/export — Excel (spec Fase 3 §4)', () => {
       'Resumen',
       'Movimientos',
       'Por categoría',
+      'Por compañía',
       'Por cuenta',
     ]);
 
@@ -421,18 +431,18 @@ describe('GET /api/reports/export — Excel (spec Fase 3 §4)', () => {
     expect(values(movements, 1)).toEqual(HEADER);
     expect(movements.rowCount).toBe(9);
     expect(movements.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
-    expect(movements.autoFilter).toBe('A1:N1');
+    expect(movements.autoFilter).toBe('A1:O1');
     const first = movements.getRow(2);
     expect(first.getCell(1).numFmt).toBe('dd/mm/yyyy');
     expect((first.getCell(1).value as Date).toISOString().slice(0, 10)).toBe('2026-10-01');
     expect((first.getCell(1).value as Date).toISOString()).toBe('2026-10-01T00:00:00.000Z');
     expect(first.getCell(3).value).toBe("'+bono");
-    expect(first.getCell(12).value).toBe(4_000_000);
-    expect(first.getCell(12).numFmt).toBe('"$"#,##0');
-    expect(movements.getRow(3).getCell(10).value).toBe(12);
+    expect(first.getCell(13).value).toBe(4_000_000);
+    expect(first.getCell(13).numFmt).toBe('"$"#,##0');
+    expect(movements.getRow(3).getCell(11).value).toBe(12);
     const lunch = movements.getRow(5);
     expect(lunch.getCell(3).value).toBe('Almuerzo; "especial"\ncon postre 🍕');
-    expect(lunch.getCell(14).value).toBe('\'=HYPERLINK("http://x")');
+    expect(lunch.getCell(15).value).toBe('\'=HYPERLINK("http://x")');
 
     const byCategory = wb.getWorksheet('Por categoría')!;
     const expenseRows = report.expenseByCategory.map((c) => [c.category.name, c.amount, c.share]);
@@ -651,10 +661,10 @@ describe('GET /api/reports/export — limits and isolation (spec Fase 3 §4)', (
       (await download(app, cookie, 'preset=THIS_MONTH&format=xlsx')).rawPayload,
     );
     const cells = wb.getWorksheet('Movimientos')!;
-    expect(cells.getRow(2).getCell(6).value).toBe("'=Cuenta");
-    expect(cells.getRow(2).getCell(13).value).toBe("'@etiqueta");
-    expect(cells.getRow(3).getCell(8).value).toBe("'+Tarjeta");
-    expect(cells.getRow(4).getCell(9).value).toBe("'-Préstamo");
+    expect(cells.getRow(2).getCell(7).value).toBe("'=Cuenta");
+    expect(cells.getRow(2).getCell(14).value).toBe("'@etiqueta");
+    expect(cells.getRow(3).getCell(9).value).toBe("'+Tarjeta");
+    expect(cells.getRow(4).getCell(10).value).toBe("'-Préstamo");
     expect(values(wb.getWorksheet('Por cuenta')!, 2)[0]).toBe("'=Cuenta");
   });
 

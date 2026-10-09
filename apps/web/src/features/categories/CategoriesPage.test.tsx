@@ -59,6 +59,15 @@ describe('CategoriesPage', () => {
     await waitFor(() => expect(restored).toEqual(['k3']));
   });
 
+  it('ignores an inherited property name in ?tab= and falls back to Gastos', async () => {
+    mockApi({
+      'GET /auth/me': () => ({ status: 200, body: { user: demoUser } }),
+      'GET /categories': () => ({ status: 200, body: { items: [cat({})] } }),
+    });
+    renderWithProviders(<CategoriesPage />, { route: '/categories?tab=constructor' });
+    expect(await screen.findByRole('radio', { name: 'Gastos' })).toBeChecked();
+  });
+
   it('renames a tag from the Etiquetas tab and shows the lower-cased name', async () => {
     const renamed: unknown[] = [];
     let tagName = 'viaje';

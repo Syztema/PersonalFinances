@@ -23,6 +23,7 @@ const base: TransactionDTO = {
   creditCard: null,
   debt: null,
   category: null,
+  companion: null,
   goalId: null,
   installments: null,
   paymentMethod: null,
@@ -170,5 +171,29 @@ describe('TransactionRow icon contrast (final review I2)', () => {
     );
     expect(iconBadge()).toHaveClass('text-white');
     expect(iconBadge()).not.toHaveClass('text-surface');
+  });
+
+  it('shows who the expense was with as part of the row name', () => {
+    const { rerender } = render(
+      <TransactionRow
+        onSelect={() => undefined}
+        transaction={{
+          ...base,
+          description: 'Asado',
+          companion: { ...ref('p4', 'Amigos'), icon: 'users' },
+        }}
+      />,
+    );
+    expect(screen.getByRole('img', { name: 'Con Amigos' })).toBeInTheDocument();
+    expect(screen.getByRole('button')).toHaveAccessibleName(/Con Amigos/);
+    rerender(
+      <TransactionRow
+        onSelect={() => undefined}
+        transaction={{ ...base, companion: { ...ref('p3', 'Vecinos'), isActive: false } }}
+      />,
+    );
+    expect(screen.getByRole('img', { name: 'Con Vecinos (eliminada)' })).toBeInTheDocument();
+    rerender(<TransactionRow onSelect={() => undefined} transaction={base} />);
+    expect(screen.queryByRole('img', { name: /^Con / })).not.toBeInTheDocument();
   });
 });

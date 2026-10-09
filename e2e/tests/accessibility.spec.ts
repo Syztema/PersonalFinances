@@ -9,6 +9,7 @@ const PAGES: Array<{ path: string; heading: string | RegExp }> = [
   { path: '/transactions', heading: 'Movimientos' },
   { path: '/budgets', heading: 'Presupuestos' },
   { path: '/reports', heading: 'Reportes' },
+  { path: '/categories?tab=companions', heading: 'Categorías' },
   { path: '/profile', heading: 'Perfil y seguridad' },
 ];
 

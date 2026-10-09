@@ -1,5 +1,12 @@
 import type { TransactionInput } from '@finanzas/shared';
-import type { Account, Category, CreditCard, Debt, Goal } from '../../generated/prisma/client';
+import type {
+  Account,
+  Category,
+  Companion,
+  CreditCard,
+  Debt,
+  Goal,
+} from '../../generated/prisma/client';
 import { badRequest } from '../../lib/errors';
 import type { DbClient } from '../../lib/prisma';
 
@@ -10,6 +17,7 @@ export interface ResolvedRefs {
   debt: Debt | null;
   category: Category | null;
   goal: Goal | null;
+  companion: Companion | null;
 }
 
 /** Referencias del movimiento original: si no cambian, se permiten aunque estén archivadas. */
@@ -19,6 +27,7 @@ export interface ExistingRefs {
   creditCardId: string | null;
   debtId: string | null;
   categoryId: string | null;
+  companionId: string | null;
 }
 
 export interface ResolveOptions {
@@ -47,15 +56,17 @@ export async function resolveRefs(
     debtId: refId(input, 'debtId'),
     categoryId: refId(input, 'categoryId'),
     goalId: refId(input, 'goalId'),
+    companionId: refId(input, 'companionId'),
   };
   const key = (id: string) => ({ id_userId: { id, userId } });
-  const [account, toAccount, card, debt, category, goal] = await Promise.all([
+  const [account, toAccount, card, debt, category, goal, companion] = await Promise.all([
     ids.accountId ? db.account.findUnique({ where: key(ids.accountId) }) : null,
     ids.toAccountId ? db.account.findUnique({ where: key(ids.toAccountId) }) : null,
     ids.creditCardId ? db.creditCard.findUnique({ where: key(ids.creditCardId) }) : null,
     ids.debtId ? db.debt.findUnique({ where: key(ids.debtId) }) : null,
     ids.categoryId ? db.category.findUnique({ where: key(ids.categoryId) }) : null,
     ids.goalId ? db.goal.findUnique({ where: key(ids.goalId) }) : null,
+    ids.companionId ? db.companion.findUnique({ where: key(ids.companionId) }) : null,
   ]);
 
   const unchanged = (k: keyof ExistingRefs) => existing !== undefined && existing[k] === ids[k];
@@ -75,6 +86,8 @@ export async function resolveRefs(
   checkActive('toAccountId', toAccount, 'Cuenta no encontrada', 'La cuenta fue eliminada');
   checkActive('creditCardId', card, 'Tarjeta no encontrada', 'La tarjeta fue eliminada');
   checkActive('debtId', debt, 'Préstamo no encontrado', 'El préstamo fue eliminado');
+  // Spec con quién §2.3: al editar se conserva la opción que el gasto ya tenía, aunque esté eliminada.
+  checkActive('companionId', companion, 'Opción no encontrada', 'La opción fue eliminada');
 
   if (ids.categoryId) {
     const expected = input.type === 'INCOME' ? 'INCOME' : 'EXPENSE';
@@ -102,5 +115,5 @@ export async function resolveRefs(
       fields,
     );
   }
-  return { account, toAccount, card, debt, category, goal };
+  return { account, toAccount, card, debt, category, goal, companion };
 }

@@ -9,6 +9,7 @@ export const transactionInclude = {
   creditCard: { select: refSelect },
   debt: { select: refSelect },
   category: { select: categoryRefSelect },
+  companion: { select: refSelect },
   tags: { select: { tag: { select: { name: true } } } },
   children: { select: { amount: true } },
 } satisfies Prisma.TransactionInclude;
@@ -29,6 +30,7 @@ export function toTransactionDTO(row: TransactionRow): TransactionDTO {
     creditCard: row.creditCard,
     debt: row.debt,
     category: row.category,
+    companion: row.companion,
     goalId: row.goalId,
     installments: row.installments,
     paymentMethod: row.paymentMethod,

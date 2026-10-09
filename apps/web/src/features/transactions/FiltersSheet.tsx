@@ -15,7 +15,7 @@ import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Sheet } from '../../components/ui/Sheet';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
-import { qk, useAccounts, useCards, useCategories } from '../../lib/queries';
+import { qk, useAccounts, useCards, useCategories, useCompanions } from '../../lib/queries';
 import { refName } from '../../lib/refs';
 import { EMPTY_FILTERS, type TxFilters } from './filters';
 
@@ -47,6 +47,7 @@ function FiltersForm({ value, onApply }: { value: TxFilters; onApply: (f: TxFilt
   const accounts = useAccounts();
   const cards = useCards();
   const categories = useCategories();
+  const companions = useCompanions();
   const tags = useQuery({
     queryKey: qk.tags,
     queryFn: () => api.get<{ items: TagDTO[] }>('/tags').then((r) => r.items),
@@ -166,6 +167,21 @@ function FiltersForm({ value, onApply }: { value: TxFilters; onApply: (f: TxFilt
                 {refName(c)}
               </option>
             ))}
+        </Select>
+      </Field>
+      <Field label="Con quién" htmlFor="f-companion" hint="Gastos y compras con tarjeta.">
+        <Select
+          id="f-companion"
+          value={draft.companionId}
+          onChange={(e) => set('companionId', e.target.value)}
+        >
+          <option value="">Todos</option>
+          <option value="none">Sin indicar</option>
+          {(companions.data ?? []).map((c) => (
+            <option key={c.id} value={c.id}>
+              {refName(c)}
+            </option>
+          ))}
         </Select>
       </Field>
       <Field label="Etiqueta" htmlFor="f-tag">

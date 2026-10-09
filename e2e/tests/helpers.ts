@@ -36,11 +36,16 @@ export async function openExpense(page: Page) {
   return page.getByRole('dialog', { name: 'Nuevo gasto' });
 }
 
-/** Registra un gasto pagado con la primera cuenta. `amount` en pesos, sin puntos. */
-export async function addExpense(page: Page, amount: string, category: string) {
+/** Registra un gasto pagado con la primera cuenta. `amount` en pesos, sin puntos; `companion` es "¿Con quién?" (opcional). */
+export async function addExpense(page: Page, amount: string, category: string, companion?: string) {
   const sheet = await openExpense(page);
   await sheet.getByLabel('Valor').fill(amount);
   await sheet.getByRole('radio', { name: new RegExp(category) }).click();
+  if (companion) {
+    const option = sheet.getByRole('button', { name: companion, exact: true });
+    await option.click();
+    await expect(option).toHaveAttribute('aria-pressed', 'true');
+  }
   await sheet.getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect(sheet).toBeHidden();
 }

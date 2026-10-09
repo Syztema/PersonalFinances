@@ -94,6 +94,7 @@ model User {
   debts            Debt[]
   categories       Category[]
   tags             Tag[]
+  companions       Companion[]
   transactions     Transaction[]
   transactionTags  TransactionTag[]
   budgets          Budget[]
@@ -259,6 +260,25 @@ model Tag {
   @@unique([id, userId])
 }
 
+/// Con quién se gastó (spec con quién §2.1): opciones editables por usuario.
+model Companion {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  name      String   @db.VarChar(30)
+  icon      String   @db.VarChar(40)
+  color     String   @db.VarChar(7)
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([userId, name])
+  @@unique([id, userId])
+}
+
 model TransactionTag {
   userId        String @db.Uuid
   transactionId String @db.Uuid
@@ -287,6 +307,7 @@ model Transaction {
   debtId        String?         @db.Uuid
   categoryId    String?         @db.Uuid
   goalId        String?         @db.Uuid
+  companionId   String?         @db.Uuid
   installments  Int?            @db.SmallInt
   paymentMethod PaymentMethod?
   parentId      String?         @db.Uuid
@@ -300,6 +321,7 @@ model Transaction {
   debt          Debt?            @relation(fields: [debtId, userId], references: [id, userId], onDelete: NoAction)
   category      Category?        @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
   goal          Goal?            @relation(fields: [goalId, userId], references: [id, userId], onDelete: NoAction)
+  companion     Companion?       @relation(fields: [companionId, userId], references: [id, userId], onDelete: NoAction)
   parent        Transaction?     @relation("TransactionChildren", fields: [parentId, userId], references: [id, userId], onDelete: Cascade)
   children      Transaction[]    @relation("TransactionChildren")
   tags          TransactionTag[]
@@ -312,6 +334,7 @@ model Transaction {
   @@index([userId, creditCardId, date])
   @@index([userId, debtId])
   @@index([userId, categoryId, date])
+  @@index([userId, companionId])
   @@index([userId, type, date])
   @@index([parentId])
   @@index([goalId])

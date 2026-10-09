@@ -3,6 +3,7 @@ import type {
   AccountType,
   CategoryKind,
   CategoryRefDTO,
+  CompanionRefDTO,
   ReportDTO,
 } from '@finanzas/shared';
 
@@ -31,6 +32,14 @@ export const accountRef = (
   icon: 'wallet',
   color: '#2563eb',
   isActive: true,
+});
+
+export const companionRef = (id: string, name: string, isActive = true): CompanionRefDTO => ({
+  id,
+  name,
+  icon: 'users',
+  color: '#c2410c',
+  isActive,
 });
 
 /**
@@ -85,6 +94,23 @@ export function makeReport(overrides: Partial<ReportDTO> = {}): ReportDTO {
       { method: 'BANK', amount: 1_800_000, share: 0.8372 },
       { method: 'CREDIT_CARD', amount: 350_000, share: 0.1628 },
     ],
+    expenseByCompanion: [
+      { companion: companionRef('p-friends', 'Amigos'), amount: 900_000, share: 0.4186 },
+      { companion: companionRef('p-partner', 'Pareja'), amount: 500_000, share: 0.2326 },
+      { companion: companionRef('p-family', 'Familia', false), amount: 250_000, share: 0.1163 },
+      { companion: null, amount: 500_000, share: 0.2326 },
+    ],
+    companionMonths: [
+      {
+        month: '2026-10',
+        items: [
+          { companionId: 'p-friends', amount: 900_000 },
+          { companionId: 'p-partner', amount: 500_000 },
+          { companionId: 'p-family', amount: 250_000 },
+          { companionId: null, amount: 500_000 },
+        ],
+      },
+    ],
     months: [
       {
         month: '2026-10',
@@ -129,6 +155,8 @@ export function makeEmptyReport(overrides: Partial<ReportDTO> = {}): ReportDTO {
     ],
     cards: [],
     paymentMethods: [],
+    expenseByCompanion: [],
+    companionMonths: [{ month: '2026-10', items: [] }],
     months: [
       {
         month: '2026-10',

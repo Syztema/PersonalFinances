@@ -21,10 +21,11 @@ import { PageSpinner } from '../../components/ui/Spinner';
 import { api } from '../../lib/api';
 import { formatDate, formatShortDate } from '../../lib/format';
 import { Icon } from '../../lib/icons';
-import { useAccounts, useCards, useCategories } from '../../lib/queries';
+import { useAccounts, useCards, useCategories, useCompanions } from '../../lib/queries';
 import { frozenHolder, refName } from '../../lib/refs';
 import { CATEGORY_USE_KEY, LAST_SOURCE_KEY, readJSON, writeJSON } from '../../lib/storage';
 import { useToday } from '../auth/useAuth';
+import { CompanionPicker } from './CompanionPicker';
 import { DateChips } from './DateChips';
 import { NeedsAccount } from './NeedsAccount';
 import { toFormErrors } from '../../lib/formErrors';
@@ -80,12 +81,14 @@ export function TransactionForm({ mode, preferCard, presetCardId, edit, onDone }
   const accounts = useAccounts();
   const cards = useCards();
   const categories = useCategories();
+  const companions = useCompanions();
   const save = useSaveTransaction(
     edit ? 'Movimiento actualizado' : mode === 'income' ? 'Ingreso guardado' : 'Gasto guardado',
   );
 
   const [amount, setAmount] = useState<number | null>(edit?.amount ?? null);
   const [categoryId, setCategoryId] = useState<string | null>(edit?.category?.id ?? null);
+  const [companionId, setCompanionId] = useState<string | null>(edit?.companion?.id ?? null);
   const [chosenSource, setChosenSource] = useState<Source | null>(
     initialSource(edit, presetCardId),
   );
@@ -170,6 +173,16 @@ export function TransactionForm({ mode, preferCard, presetCardId, edit, onDone }
     if (root) visibleRoots.push(root);
   }
 
+  // Spec con quién §3.1: las opciones activas y, al editar, la del movimiento aunque esté eliminada.
+  const activeCompanions = (companions.data ?? []).filter((c) => c.isActive);
+  const editCompanion = edit?.companion
+    ? ((companions.data ?? []).find((c) => c.id === edit.companion?.id) ?? edit.companion)
+    : null;
+  const companionOptions =
+    editCompanion && !activeCompanions.some((c) => c.id === editCompanion.id)
+      ? [...activeCompanions, editCompanion]
+      : activeCompanions;
+
   if (accounts.isPending || categories.isPending || (mode === 'expense' && cards.isPending))
     return <PageSpinner />;
   if (edit && edit.type !== 'EXPENSE' && edit.type !== 'CARD_PURCHASE' && edit.type !== 'INCOME') {
@@ -218,6 +231,7 @@ export function TransactionForm({ mode, preferCard, presetCardId, edit, onDone }
             toFormErrors(err, [
               'amount',
               'categoryId',
+              'companionId',
               'source',
               'accountId',
               'creditCardId',
@@ -272,6 +286,7 @@ export function TransactionForm({ mode, preferCard, presetCardId, edit, onDone }
             ...common,
             creditCardId: source.id,
             installments: n,
+            companionId,
             ...(edit ? { payee: edit.payee } : {}),
           }
         : {
@@ -279,6 +294,7 @@ export function TransactionForm({ mode, preferCard, presetCardId, edit, onDone }
             ...common,
             accountId: source.id,
             paymentMethod: paymentMethod || null,
+            companionId,
             ...(edit ? { payee: edit.payee } : {}),
           };
   };
@@ -326,6 +342,7 @@ export function TransactionForm({ mode, preferCard, presetCardId, edit, onDone }
             holder={frozen}
             editable={[
               'la categoría',
+              ...(mode === 'expense' ? ['con quién'] : []),
               'la descripción',
               'las etiquetas',
               ...(mode === 'income' ? ['la fuente'] : []),
@@ -374,6 +391,15 @@ export function TransactionForm({ mode, preferCard, presetCardId, edit, onDone }
           )}
           {errors.categoryId && <p className="text-sm text-negative">{errors.categoryId}</p>}
         </div>
+        {mode === 'expense' && companions.data && (
+          <CompanionPicker
+            options={companionOptions}
+            value={companionId}
+            onChange={setCompanionId}
+            onNavigate={onDone}
+            error={errors.companionId}
+          />
+        )}
 
         <div className="space-y-2">
           <p className="text-sm font-medium">{mode === 'income' ? 'Recibido en' : 'Pagado con'}</p>

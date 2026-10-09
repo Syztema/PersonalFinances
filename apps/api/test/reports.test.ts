@@ -392,6 +392,8 @@ describe('GET /api/reports — read only, validation and isolation', () => {
       accounts: [],
       cards: [],
       paymentMethods: [],
+      expenseByCompanion: [],
+      companionMonths: [{ month: '2026-10', items: [] }],
       months: [
         {
           month: '2026-10',

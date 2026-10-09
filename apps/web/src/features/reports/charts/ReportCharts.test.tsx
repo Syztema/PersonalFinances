@@ -8,9 +8,11 @@ import {
   formatShare,
   isAnimated,
   monthTickFormatter,
+  OTHER_COLOR,
   seriesColor,
   tooltipMoney,
 } from './chartTheme';
+import { EMPTY_WHO, seriesFill, UNSET_COLOR } from './companionSeries';
 import ReportCharts from './ReportCharts';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -42,6 +44,15 @@ describe('ReportCharts', () => {
         ['Mercado', '$820.000', '38,1 %'],
         ['Transporte', '$180.000', '8,4 %'],
         ['Restaurantes', '$150.000', '7,0 %'],
+      ],
+      'Gastos por compañía': [
+        ['Amigos', '$900.000', '41,9 %'],
+        ['Pareja', '$500.000', '23,3 %'],
+        ['Familia (eliminada)', '$250.000', '11,6 %'],
+        ['Sin indicar', '$500.000', '23,3 %'],
+      ],
+      'Con quién gastas, mes a mes': [
+        ['octubre de 2026', '$900.000', '$500.000', '$250.000', '$500.000'],
       ],
       'Gastos por método de pago': [
         ['Cuenta bancaria', '$1.800.000', '83,7 %'],
@@ -122,6 +133,30 @@ describe('ReportCharts', () => {
       ['octubre de 2026', '$2.500.000', '$2.150.000'],
     ]);
   });
+
+  it('names one column per series in the monthly table, "Sin indicar" last', async () => {
+    render(<ReportCharts report={makeReport()} printMode={false} />);
+    const title = 'Con quién gastas, mes a mes';
+    await openTable(title);
+    const headers = within(within(card(title)).getByRole('table', { name: title }))
+      .getAllByRole('columnheader')
+      .map((h) => h.textContent);
+    expect(headers).toEqual(['Mes', 'Amigos', 'Pareja', 'Familia (eliminada)', 'Sin indicar']);
+  });
+
+  it('keeps the "Gastos por compañía" table open when printing', () => {
+    render(<ReportCharts report={makeReport()} printMode />);
+    expect(rowsOf('Gastos por compañía')).toHaveLength(4);
+  });
+
+  it('colors options by rank, "Otros" and "Sin indicar" apart', () => {
+    const ref = { id: 'x', name: 'X', icon: 'users', color: '#000000', isActive: true };
+    expect(seriesFill({ key: 'x', companion: ref, amount: 1, share: 1 }, 0)).toBe(seriesColor(0));
+    expect(seriesFill({ key: 'x', companion: ref, amount: 1, share: 1 }, 2)).toBe(seriesColor(2));
+    expect(seriesFill({ key: 'other', companion: null, amount: 1, share: 1 }, 5)).toBe(OTHER_COLOR);
+    expect(seriesFill({ key: 'none', companion: null, amount: 1, share: 1 }, 6)).toBe(UNSET_COLOR);
+    expect(UNSET_COLOR).not.toBe(OTHER_COLOR);
+  });
 });
 
 describe('ReportCharts edge cases (review focus #5)', () => {
@@ -144,6 +179,8 @@ describe('ReportCharts edge cases (review focus #5)', () => {
     const messages: Record<string, string> = {
       'Ingresos vs. gastos': 'Sin ingresos ni gastos en este periodo.',
       'Gastos por categoría': 'Sin gastos en este periodo.',
+      'Gastos por compañía': EMPTY_WHO,
+      'Con quién gastas, mes a mes': EMPTY_WHO,
       'Gastos por método de pago': 'Sin gastos en este periodo.',
       'Dónde está tu dinero': 'Sin cuentas con saldo en este periodo.',
       'Deuda de tarjetas': 'Sin tarjetas con deuda ni movimientos en este periodo.',
@@ -153,6 +190,20 @@ describe('ReportCharts edge cases (review focus #5)', () => {
     };
     for (const [title, message] of Object.entries(messages)) {
       expect(within(card(title)).getByText(message)).toBeVisible();
+      expect(
+        within(card(title)).queryByRole('button', { name: 'Ver tabla' }),
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it('shows the empty state when every expense is Sin indicar', () => {
+    const report = makeReport({
+      expenseByCompanion: [{ companion: null, amount: 2_150_000, share: 1 }],
+      companionMonths: [{ month: '2026-10', items: [{ companionId: null, amount: 2_150_000 }] }],
+    });
+    render(<ReportCharts report={report} printMode={false} />);
+    for (const title of ['Gastos por compañía', 'Con quién gastas, mes a mes']) {
+      expect(within(card(title)).getByText(EMPTY_WHO)).toBeVisible();
       expect(
         within(card(title)).queryByRole('button', { name: 'Ver tabla' }),
       ).not.toBeInTheDocument();
@@ -207,7 +258,7 @@ describe('ReportCharts edge cases (review focus #5)', () => {
     const { container } = render(<ReportCharts report={report} printMode />);
     await settle();
     const svgs = container.querySelectorAll('.recharts-wrapper > svg');
-    expect(svgs).toHaveLength(7);
+    expect(svgs).toHaveLength(9);
     // El dominio incluye el sobregiro: el eje de las barras muestra ticks negativos.
     const ticks = [...card('Dónde está tu dinero').querySelectorAll('text')];
     expect(ticks.some((t) => t.textContent?.startsWith('-'))).toBe(true);
@@ -258,7 +309,7 @@ describe('ReportCharts when printing (spec §5.3)', () => {
     const { container } = render(<ReportCharts report={makeReport()} printMode />);
     await settle();
     const svgs = [...container.querySelectorAll('.recharts-wrapper > svg')];
-    expect(svgs).toHaveLength(8);
+    expect(svgs).toHaveLength(10);
     for (const svg of svgs) expect(svg).toHaveAttribute('width', '680');
     for (const title of ['Gastos por categoría', 'Dónde está tu dinero']) {
       expect(within(card(title)).getByRole('table', { name: title })).toBeVisible();

@@ -82,6 +82,20 @@ export interface TagDTO {
   usageCount: number;
 }
 
+/** Con quién se gastó (spec con quién §2.4); `isActive` false se muestra "(eliminada)". */
+export type CompanionRefDTO = RefDTO;
+
+export interface CompanionDTO {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  isActive: boolean;
+  sortOrder: number;
+  /** Movimientos que la usan (también los de cuentas o tarjetas eliminadas). */
+  usageCount: number;
+}
+
 export interface CreditCardDTO {
   id: string;
   name: string;
@@ -153,6 +167,8 @@ export interface TransactionDTO {
   creditCard: RefDTO | null;
   debt: RefDTO | null;
   category: CategoryRefDTO | null;
+  /** Con quién (spec con quién §2): solo gastos y compras con tarjeta; si no, null. */
+  companion: CompanionRefDTO | null;
   goalId: string | null;
   installments: number | null;
   paymentMethod: PaymentMethod | null;
@@ -383,6 +399,13 @@ export interface ReportDTO {
   }>;
   cards: Array<{ card: RefDTO; purchases: number; payments: number; closingDebt: number }>;
   paymentMethods: Array<{ method: DerivedMethod; amount: number; share: number }>;
+  /** Spec con quién §4.1: gastos por compañía; `companion` null = "Sin indicar" (siempre al final). Σ amount = totals.expense. */
+  expenseByCompanion: Array<{ companion: CompanionRefDTO | null; amount: number; share: number }>;
+  /** Por cada mes de `period.months`, los gastos de ese mes por compañía (recortados al periodo). */
+  companionMonths: Array<{
+    month: string;
+    items: Array<{ companionId: string | null; amount: number }>;
+  }>;
   months: Array<{
     month: string;
     income: number;

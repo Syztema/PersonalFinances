@@ -12,4 +12,5 @@ export * from './schemas/debts';
 export * from './schemas/transactions';
 export * from './schemas/planning';
 export * from './schemas/tags';
+export * from './schemas/companions';
 export * from './schemas/reports';

@@ -3,6 +3,7 @@ import type {
   AlertDTO,
   BudgetDTO,
   CategoryDTO,
+  CompanionDTO,
   CreditCardDTO,
   DebtDTO,
   FinancialSettingsResponse,
@@ -25,6 +26,7 @@ export const qk = {
   debts: ['debts'] as const,
   categories: ['categories'] as const,
   tags: ['tags'] as const,
+  companions: ['companions'] as const,
   transactions: ['transactions'] as const,
   goals: ['goals'] as const,
   recurring: ['recurring'] as const,
@@ -47,6 +49,8 @@ export function invalidateFinance(queryClient: QueryClient) {
       qk.debts,
       qk.transactions,
       qk.tags,
+      // Cada gasto cambia el número de usos de su opción de "con quién".
+      qk.companions,
       // Un pago de préstamo con intereses puede restaurar la categoría "Intereses y comisiones".
       qk.categories,
       qk.goals,
@@ -72,6 +76,12 @@ export const useCategories = () =>
   useQuery({
     queryKey: qk.categories,
     queryFn: () => items<CategoryDTO>('/categories'),
+    staleTime: 5 * 60_000,
+  });
+export const useCompanions = () =>
+  useQuery({
+    queryKey: qk.companions,
+    queryFn: () => items<CompanionDTO>('/companions'),
     staleTime: 5 * 60_000,
   });
 export const useGoals = () =>

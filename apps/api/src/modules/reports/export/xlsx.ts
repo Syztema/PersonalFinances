@@ -11,7 +11,7 @@ const MONEY = '"$"#,##0';
 const DATE = 'dd/mm/yyyy';
 /** Se ve como `0,0 %` en un Excel en español (el código de formato siempre usa punto). */
 const PERCENT = '0.0%';
-const COLUMN_WIDTHS = [12, 18, 32, 20, 20, 20, 20, 18, 18, 8, 18, 14, 24, 32];
+const COLUMN_WIDTHS = [12, 18, 32, 20, 20, 18, 20, 20, 18, 18, 8, 18, 14, 24, 32];
 
 /** Fecha calendario como fecha real a medianoche UTC: no se corre de día en ninguna zona. */
 const dateCell = (iso: IsoDate) => toDbDate(iso);
@@ -36,7 +36,7 @@ export function formatGeneratedAt(now: Date, timeZone: string): string {
   return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}`;
 }
 
-/** Spec Fase 3 §4: Resumen, Movimientos, Por categoría y Por cuenta. */
+/** Spec Fase 3 §4 y con quién §4.4: Resumen, Movimientos, Por categoría, Por compañía y Por cuenta. */
 export async function toXlsx(
   report: ReportBody,
   rows: ExportRow[],
@@ -83,6 +83,7 @@ export async function toXlsx(
       text(r.description),
       text(r.category),
       text(r.subcategory),
+      text(r.companion),
       text(r.account),
       text(r.toAccount),
       text(r.card),
@@ -94,7 +95,7 @@ export async function toXlsx(
       text(r.notes),
     ]);
     row.getCell(1).numFmt = DATE;
-    row.getCell(12).numFmt = MONEY;
+    row.getCell(13).numFmt = MONEY;
   }
 
   const byCategory = wb.addWorksheet('Por categoría');
@@ -111,6 +112,22 @@ export async function toXlsx(
   block('Gastos', report.expenseByCategory);
   byCategory.addRow([]);
   block('Ingresos', report.incomeByCategory);
+
+  const byCompanion = wb.addWorksheet('Por compañía');
+  byCompanion.columns = ['Con quién', 'Valor', 'Porcentaje'].map((header, i) => ({
+    header,
+    width: [28, 16, 12][i],
+  }));
+  byCompanion.getRow(1).font = { bold: true };
+  for (const item of report.expenseByCompanion) {
+    const row = byCompanion.addRow([
+      item.companion ? text(item.companion.name) : 'Sin indicar',
+      item.amount,
+      item.share,
+    ]);
+    row.getCell(2).numFmt = MONEY;
+    row.getCell(3).numFmt = PERCENT;
+  }
 
   const byAccount = wb.addWorksheet('Por cuenta');
   byAccount.columns = ['Cuenta', 'Tipo', 'Saldo inicial', 'Entradas', 'Salidas', 'Saldo final'].map(

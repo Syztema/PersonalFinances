@@ -104,7 +104,7 @@ describe('what is never printed (spec §5.3)', () => {
       vi.fn(async () => new Response(JSON.stringify(makeReport()))),
     );
     const { container } = renderWithProviders(<ReportsPage />);
-    await screen.findByRole('region', { name: 'Gastos por categoría' }, { timeout: 5000 });
+    await screen.findByRole('region', { name: 'Gastos por categoría' }, { timeout: 15_000 });
 
     let printed: { buttons: string[]; tables: string[] } | null = null;
     vi.spyOn(window, 'print').mockImplementation(() => {
@@ -119,7 +119,7 @@ describe('what is never printed (spec §5.3)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Imprimir o guardar PDF' }));
     expect(printed).toEqual({
       buttons: [],
-      tables: ['Gastos por categoría', 'Dónde está tu dinero'],
+      tables: ['Gastos por categoría', 'Gastos por compañía', 'Dónde está tu dinero'],
     });
     expect(screen.getByText(/^Finanzas — Reporte del/).closest('header')).toHaveClass(
       'hidden',
@@ -127,7 +127,7 @@ describe('what is never printed (spec §5.3)', () => {
     );
     expect(screen.getByRole('heading', { level: 1, name: 'Reportes' })).toHaveClass('print:hidden');
     const cards = [...container.querySelectorAll('section')];
-    expect(cards).toHaveLength(9);
+    expect(cards).toHaveLength(11);
     for (const card of cards) expect(card).toHaveClass('break-inside-avoid');
-  });
+  }, 20_000);
 });

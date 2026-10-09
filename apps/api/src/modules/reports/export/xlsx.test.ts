@@ -48,6 +48,15 @@ const report: ReportBody = {
   ],
   cards: [],
   paymentMethods: [],
+  expenseByCompanion: [
+    {
+      companion: { id: 'p', name: 'Pareja', icon: 'heart', color: '#be185d', isActive: false },
+      amount: 1_200_000,
+      share: 0.9057,
+    },
+    { companion: null, amount: 125_000, share: 0.0943 },
+  ],
+  companionMonths: [],
   months: [],
 };
 
@@ -58,6 +67,7 @@ const rows: ExportRow[] = [
     description: 'Almuerzo; "especial"\ncon postre 🍕',
     category: 'Alimentación',
     subcategory: '',
+    companion: 'Amigos',
     account: 'Bancolombia',
     toAccount: '',
     card: '',
@@ -81,12 +91,13 @@ async function read(buffer: Buffer) {
 const values = (ws: ExcelJS.Worksheet, n: number) => (ws.getRow(n).values as unknown[]).slice(1);
 
 describe('toXlsx (spec Fase 3 §4)', () => {
-  it('writes the four sheets with the summary, the movements and the breakdowns', async () => {
+  it('writes the five sheets with the summary, the movements and the breakdowns', async () => {
     const wb = await read(await toXlsx(report, rows, '20/10/2026 10:00'));
     expect(wb.worksheets.map((w) => w.name)).toEqual([
       'Resumen',
       'Movimientos',
       'Por categoría',
+      'Por compañía',
       'Por cuenta',
     ]);
 
@@ -105,6 +116,7 @@ describe('toXlsx (spec Fase 3 §4)', () => {
       'Descripción',
       'Categoría',
       'Subcategoría',
+      'Con quién',
       'Cuenta',
       'Cuenta destino',
       'Tarjeta',
@@ -117,12 +129,20 @@ describe('toXlsx (spec Fase 3 §4)', () => {
     ]);
     expect(movements.getRow(1).font?.bold).toBe(true);
     expect(movements.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
-    expect(movements.autoFilter).toBe('A1:N1');
+    expect(movements.autoFilter).toBe('A1:O1');
     const data = movements.getRow(2);
+    expect(data.getCell(6).value).toBe('Amigos');
     expect(data.getCell(3).value).toBe('Almuerzo; "especial"\ncon postre 🍕');
-    expect(data.getCell(14).value).toBe('\'=HYPERLINK("http://x")');
-    expect(data.getCell(12).value).toBe(45_000);
-    expect(data.getCell(12).numFmt).toBe('"$"#,##0');
+    expect(data.getCell(15).value).toBe('\'=HYPERLINK("http://x")');
+    expect(data.getCell(13).value).toBe(45_000);
+    expect(data.getCell(13).numFmt).toBe('"$"#,##0');
+
+    const byCompanion = wb.getWorksheet('Por compañía')!;
+    expect(values(byCompanion, 1)).toEqual(['Con quién', 'Valor', 'Porcentaje']);
+    expect(values(byCompanion, 2)).toEqual(['Pareja', 1_200_000, 0.9057]);
+    expect(values(byCompanion, 3)).toEqual(['Sin indicar', 125_000, 0.0943]);
+    expect(byCompanion.getCell('B2').numFmt).toBe('"$"#,##0');
+    expect(byCompanion.getCell('C2').numFmt).toBe('0.0%');
 
     const byCategory = wb.getWorksheet('Por categoría')!;
     expect(values(byCategory, 1)).toEqual(['Gastos']);

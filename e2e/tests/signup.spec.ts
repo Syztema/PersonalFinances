@@ -12,7 +12,7 @@ test('sign up, create an account and an expense: the dashboard shows both', asyn
   await expect(page).toHaveURL(/\/accounts$/);
   await createAccount(page, 'Bancolombia e2e', '2000000');
 
-  await addExpense(page, '50000', 'Alimentación');
+  await addExpense(page, '50000', 'Alimentación', 'Amigos');
 
   await page.getByRole('link', { name: 'Inicio', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Hola, Prueba' })).toBeVisible();
@@ -26,4 +26,8 @@ test('sign up, create an account and an expense: the dashboard shows both', asyn
     .locator('div')
     .filter({ has: page.locator('dt', { hasText: /^Gastos$/ }) });
   await expect(expenses.locator('dd')).toHaveText('-$50.000');
+
+  // Con quién (spec con quién §3.2): la fila del gasto lo muestra.
+  await page.goto('/transactions');
+  await expect(page.getByRole('img', { name: 'Con Amigos' })).toBeVisible();
 });

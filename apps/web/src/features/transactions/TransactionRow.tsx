@@ -2,6 +2,7 @@ import type { TransactionDTO } from '@finanzas/shared';
 import { Amount } from '../../components/ui/Amount';
 import { cn } from '../../lib/cn';
 import { Icon } from '../../lib/icons';
+import { refName } from '../../lib/refs';
 import { describeTransaction } from './describe';
 
 export function TransactionRow({
@@ -29,7 +30,19 @@ export function TransactionRow({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium">{d.title}</span>
-        <span className="block truncate text-xs text-muted">{d.subtitle}</span>
+        <span className="flex min-w-0 items-center gap-1 text-xs text-muted">
+          {transaction.companion && (
+            // Spec con quién §3.2: el ícono es parte del nombre de la fila ("Con Amigos").
+            <span
+              role="img"
+              aria-label={`Con ${refName(transaction.companion)}`}
+              className="inline-flex shrink-0"
+            >
+              <Icon name={transaction.companion.icon} size={12} />
+            </span>
+          )}
+          <span className="min-w-0 truncate">{d.subtitle}</span>
+        </span>
       </span>
       <Amount value={transaction.amount} tone={d.tone} className="shrink-0 font-semibold" />
     </button>

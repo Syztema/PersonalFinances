@@ -8,6 +8,7 @@ import { hashPassword, verifyPassword, verifyPasswordLimited } from '../../lib/p
 import { generateToken, sha256Hex } from '../../lib/tokens';
 import type { AuthContext } from '../../types/fastify';
 import { DEFAULT_CATEGORIES } from '../categories/defaults';
+import { DEFAULT_COMPANIONS } from '../companions/defaults';
 import { revokeUserSessions } from './sessions';
 
 export function toUserDTO(user: User): UserDTO {
@@ -42,6 +43,9 @@ export async function registerUser(
     await tx.financialConfiguration.create({ data: { userId: user.id } });
     await tx.category.createMany({
       data: DEFAULT_CATEGORIES.map((c, i) => ({ ...c, userId: user.id, sortOrder: i })),
+    });
+    await tx.companion.createMany({
+      data: DEFAULT_COMPANIONS.map((c, i) => ({ ...c, userId: user.id, sortOrder: i })),
     });
     return user;
   });

@@ -13,6 +13,7 @@ import type { PrismaClient } from '../src/generated/prisma/client';
 import { createAccount } from '../src/modules/accounts/service';
 import { registerUser } from '../src/modules/auth/service';
 import { listCategories } from '../src/modules/categories/service';
+import { listCompanions } from '../src/modules/companions/service';
 import { createCreditCard, getCreditCard } from '../src/modules/credit-cards/service';
 import { createDebt } from '../src/modules/debts/service';
 import { toDbDate } from '../src/lib/db';
@@ -96,6 +97,8 @@ export async function seedDemo(prisma: PrismaClient, now: Date = new Date()) {
   const categories = await listCategories(prisma, user.id);
   const cat = (name: string, kind: 'INCOME' | 'EXPENSE' = 'EXPENSE') =>
     categories.find((c) => c.name === name && c.kind === kind)!.id;
+  const companions = await listCompanions(prisma, user.id);
+  const who = (name: string) => companions.find((c) => c.name === name)!.id;
 
   let seed = 42;
   const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
@@ -191,6 +194,7 @@ export async function seedDemo(prisma: PrismaClient, now: Date = new Date()) {
       accountId: nequi.id,
       categoryId: cat('Entretenimiento'),
       description: 'Cine',
+      companionId: who('Pareja'),
     });
     add(last, 0, {
       type: 'INCOME',
@@ -225,6 +229,7 @@ export async function seedDemo(prisma: PrismaClient, now: Date = new Date()) {
         amount: between(120_000, 220_000),
         categoryId: cat('Alimentación'),
         description: 'Mercado',
+        companionId: who('Familia'),
       };
       if (i % 2 === 0)
         add(day(d), 3, {
@@ -243,6 +248,7 @@ export async function seedDemo(prisma: PrismaClient, now: Date = new Date()) {
         accountId: i % 3 === 0 ? cash.id : nequi.id,
         categoryId: cat(isLunch ? 'Alimentación' : 'Transporte'),
         description: isLunch ? 'Almuerzo' : 'Transporte',
+        ...(isLunch && { companionId: who(i % 4 === 0 ? 'Amigos' : 'Solo') }),
       });
     }
     const paymentDate = day(28);

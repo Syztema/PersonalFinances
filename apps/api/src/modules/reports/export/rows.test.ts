@@ -14,6 +14,7 @@ const lunch: ExportTransaction = {
   creditCard: null,
   debt: null,
   category: { name: 'Restaurantes', parent: { name: 'Alimentación' } },
+  companion: { name: 'Amigos' },
   tags: ['comida', 'trabajo'],
 };
 
@@ -25,6 +26,7 @@ describe('toExportRow (spec Fase 3 §4)', () => {
       description: 'Almuerzo',
       category: 'Alimentación',
       subcategory: 'Restaurantes',
+      companion: 'Amigos',
       account: 'Bancolombia',
       toAccount: '',
       card: '',
@@ -35,6 +37,10 @@ describe('toExportRow (spec Fase 3 §4)', () => {
       tags: 'comida, trabajo',
       notes: '',
     });
+  });
+
+  it('leaves who empty when the movement has none', () => {
+    expect(toExportRow({ ...lunch, companion: null }).companion).toBe('');
   });
 
   it('uses the chosen method and leaves the subcategory empty for a main category', () => {
