@@ -13,6 +13,16 @@ vi.mock('../reports/charts/CategoryBarsChart', async () => {
   const { createElement } = await import('react');
   return { CategoryBarsChart: () => createElement('p', null, 'Gráfico de gastos por categoría') };
 });
+vi.mock('../reports/charts/CompanionBarsChart', async () => {
+  const { createElement } = await import('react');
+  return { CompanionBarsChart: () => createElement('p', null, 'Gráfico de gastos por compañía') };
+});
+vi.mock('../reports/charts/CompanionMonthsChart', async () => {
+  const { createElement } = await import('react');
+  return {
+    CompanionMonthsChart: () => createElement('p', null, 'Gráfico de con quién gastas, mes a mes'),
+  };
+});
 vi.mock('../reports/charts/SavingsChart', async () => {
   const { createElement } = await import('react');
   return { SavingsChart: () => createElement('p', null, 'Gráfico de evolución del ahorro') };
@@ -62,8 +72,13 @@ describe('DashboardCharts (spec §5.2)', () => {
 
     act(() => FakeObserver.last?.enter());
     expect(await screen.findByText('Gráfico de ingresos vs. gastos')).toBeInTheDocument();
-    expect(screen.getByText('Gráfico de gastos por categoría')).toBeInTheDocument();
-    expect(screen.getByText('Gráfico de evolución del ahorro')).toBeInTheDocument();
+    expect(screen.getAllByText(/^Gráfico de /).map((p) => p.textContent)).toEqual([
+      'Gráfico de ingresos vs. gastos',
+      'Gráfico de gastos por categoría',
+      'Gráfico de gastos por compañía',
+      'Gráfico de con quién gastas, mes a mes',
+      'Gráfico de evolución del ahorro',
+    ]);
     expect(reportPresets(fetchMock)).toEqual(['LAST_6_MONTHS']);
     expect(FakeObserver.last?.disconnect).toHaveBeenCalled();
   });

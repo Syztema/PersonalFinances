@@ -45,6 +45,7 @@ async function waitForDeferredContent(page: Page, path: string) {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const recent = page.getByRole('region', { name: 'Tus últimos 6 meses' });
     await expect(recent.getByRole('region', { name: 'Ingresos vs. gastos' })).toBeVisible();
+    await expect(recent.getByRole('region', { name: 'Gastos por compañía' })).toBeVisible();
     await expect(recent.locator('svg.recharts-surface').first()).toBeVisible();
     await expect(recent.getByRole('status')).toHaveCount(0);
   }

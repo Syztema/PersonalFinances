@@ -21,7 +21,7 @@ Aplicación web para controlar finanzas personales en **pesos colombianos (COP)*
 | Pago de préstamo (capital)       | −                   | −     | —             |
 | Desembolso de préstamo           | +                   | +     | —             |
 
-- Dashboard: cuánto puedo gastar hoy (con su desglose), dinero total, disponible estimado, deudas y patrimonio, estado general con las alertas principales, balance del mes con el uso del presupuesto, cuentas, tarjetas, préstamos y metas. Al final, "Tus últimos 6 meses" con ingresos vs. gastos, gastos por categoría y evolución del ahorro (se cargan al llegar a esa parte).
+- Dashboard: cuánto puedo gastar hoy (con su desglose), dinero total, disponible estimado, deudas y patrimonio, estado general con las alertas principales, balance del mes con el uso del presupuesto, cuentas, tarjetas, préstamos y metas. Al final, "Tus últimos 6 meses" con ingresos vs. gastos, gastos por categoría, gastos por compañía (total y mes a mes) y evolución del ahorro (se cargan al llegar a esa parte).
 - Historial con búsqueda, filtros (fecha, tipo, cuenta, tarjeta, categoría, con quién, etiqueta, método, valor) y paginación.
 - **¿Con quién?**: al registrar un gasto o una compra con tarjeta puedes marcar con quién lo hiciste: Solo, Pareja, Familia, Amigos u opciones propias, que se editan en Categorías → Con quién. Reportes muestra cuánto gastas con cada una, en total y mes a mes.
 - **¿Cuánto puedo gastar hoy?**: una cifra diaria que respeta tus próximos pagos (obligaciones, tarjetas y cuotas), el ahorro que te propones y el presupuesto, con su desglose.
