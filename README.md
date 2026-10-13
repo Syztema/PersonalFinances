@@ -53,7 +53,7 @@ Navegador / celular ──HTTPS──► Traefik (Dokploy)
 ```
 
 - Un solo dominio: la SPA y la API comparten origen, así las cookies de sesión funcionan sin CORS.
-- nginx llega a la API por el alias de red `finanzas-api` (no hay nada que configurar).
+- nginx llega a la API por el nombre del servicio, `api` (no hay nada que configurar).
 - Toda la lógica financiera vive en funciones puras (`apps/api/src/domain`) con pruebas unitarias.
 - Saldos y deudas nunca se guardan: se calculan desde los movimientos.
 
@@ -157,7 +157,7 @@ Se usa un proyecto de Compose aparte (`finanzas-local`) para no mezclarlo con la
 ## Despliegue en Dokploy
 
 1. En Dokploy crea un **Project** y dentro una aplicación tipo **Compose**. Conéctala a este repositorio (rama `main`, archivo `docker-compose.yml`).
-2. En **Advanced**, activa **Isolated Deployment**. Así Dokploy crea una red propia para la aplicación, conecta todos los servicios a ella y conecta Traefik. `web` podrá llegar a `api` por nombre. Si no la activas, agrega tú la red `dokploy-network` (externa) a `web` y `api`.
+2. En **Advanced**, activa **Isolated Deployment** (obligatorio). Así Dokploy crea una red propia para la aplicación, conecta todos los servicios a ella y conecta Traefik. `web` llega a `api` por el nombre del servicio. No uses la red compartida `dokploy-network`: ahí el nombre `api` podría chocar con el de otra aplicación del servidor.
 3. En **Environment** pega el contenido de `.env.example` con tus valores reales: `APP_URL=https://finanzas.tudominio.com` y una `POSTGRES_PASSWORD` larga.
 4. En **Domains** agrega el dominio:
    - Servicio: `web`.
